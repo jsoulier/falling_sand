@@ -6,7 +6,6 @@ using namespace metal;
 struct uniformSize
 {
     uint size;
-    uint particle;
 };
 
 struct bufferReadBuffer
@@ -14,9 +13,14 @@ struct bufferReadBuffer
     uint readBuffer[1];
 };
 
+struct uniformParticle
+{
+    uint particle;
+};
+
 constant uint3 gl_WorkGroupSize [[maybe_unused]] = uint3(128u, 1u, 1u);
 
-kernel void main0(constant uniformSize& _19 [[buffer(0)]], device bufferReadBuffer& _36 [[buffer(1)]], texture2d<uint, access::write> writeImage [[texture(0)]], uint3 gl_GlobalInvocationID [[thread_position_in_grid]])
+kernel void main0(constant uniformSize& _19 [[buffer(0)]], constant uniformParticle& _62 [[buffer(1)]], device bufferReadBuffer& _36 [[buffer(2)]], texture2d<uint, access::write> writeImage [[texture(0)]], uint3 gl_GlobalInvocationID [[thread_position_in_grid]])
 {
     uint id = gl_GlobalInvocationID.x;
     if (id >= _19.size)
@@ -26,6 +30,6 @@ kernel void main0(constant uniformSize& _19 [[buffer(0)]], device bufferReadBuff
     int2 position;
     position.x = int((_36.readBuffer[id] >> uint(0)) & 65535u);
     position.y = int((_36.readBuffer[id] >> uint(16)) & 65535u);
-    writeImage.write(uint4(_19.particle), uint2(position));
+    writeImage.write(uint4(_62.particle), uint2(position));
 }
 

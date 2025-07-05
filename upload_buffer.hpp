@@ -133,19 +133,19 @@ public:
         bufferSize = transferBufferSize;
     }
 
-    SDL_GPUBuffer* getBuffer() const
+    SDL_GPUBuffer* GetBuffer() const
     {
         return buffer;
     }
 
-    uint32_t getSize() const
+    uint32_t GetBufferSize() const
     {
         return bufferSize;
     }
 
-    uint32_t getCapacity() const
+    uint32_t GetTransferBufferSize() const
     {
-        return bufferCapacity;
+        return transferBufferSize;
     }
 
 private:

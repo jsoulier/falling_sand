@@ -5,6 +5,7 @@
 #include <imgui_impl_sdlgpu3.h>
 
 #include <cstdint>
+#include <limits>
 #include <mutex>
 #include <thread>
 
@@ -253,12 +254,71 @@ static void Render()
     SDL_SubmitGPUCommandBuffer(commandBuffer);
 }
 
-static void HandleMotion(SDL_Event* event)
+static void Upload(SDL_Event* event)
 {
-    int x1 = event->motion.x - event->motion.xrel;
-    int y1 = event->motion.y - event->motion.yrel;
-    int x2 = event->motion.x;
-    int y2 = event->motion.y;
+    float x1 = event->motion.x - event->motion.xrel;
+    float y1 = event->motion.y - event->motion.yrel;
+    float x2 = event->motion.x;
+    float y2 = event->motion.y;
+    float dx = x2 - x1;
+    float dy = y2 - y1;
+    float slope = dy / dx;
+    float distance = std::sqrtf(dx * dx + dy * dy);
+    static constexpr float Step = 1.0f;
+    for (float i = 0; i < dx; i += Step)
+    {
+        int x = x2 + i;
+        int y = y2 + slope * i;
+        if (x < 0 || y < 0)
+        {
+            continue;
+        }
+        assert(x < std::numeric_limits<uint16_t>::max());
+        assert(y < std::numeric_limits<uint16_t>::max());
+        uint32_t position = 0;
+        position |= x << 0;
+        position |= y << 16;
+        uploadBuffer.Emplace(device, position);
+    }
+    if (!uploadBuffer.GetTransferBufferSize())
+    {
+        return;
+    }
+    SDL_GPUCommandBuffer* commandBuffer = SDL_AcquireGPUCommandBuffer(device);
+    if (!commandBuffer)
+    {
+        SDL_Log("Failed to acquire command buffer: %s", SDL_GetError());
+        return;
+    }
+    SDL_GPUCopyPass* copyPass = SDL_BeginGPUCopyPass(commandBuffer);
+    if (!copyPass)
+    {
+        SDL_Log("Failed to begin copy pass: %s", SDL_GetError());
+        SDL_CancelGPUCommandBuffer(commandBuffer);
+        return;
+    }
+    uploadBuffer.Upload(device, copyPass);
+    SDL_EndGPUCopyPass(copyPass);
+    SDL_GPUStorageTextureReadWriteBinding binding{};
+    binding.texture = updateTextures[readFrame];
+    SDL_GPUComputePass* computePass = SDL_BeginGPUComputePass(commandBuffer, &binding, 1, nullptr, 0);
+    if (!computePass)
+    {
+        SDL_Log("Failed to begin compute pass: %s", SDL_GetError());
+        SDL_CancelGPUCommandBuffer(commandBuffer);
+        return;
+    }
+    int groupsX = (uploadBuffer.GetBufferSize() + UPLOAD_THREADS - 1) / UPLOAD_THREADS;
+    SDL_GPUBuffer* buffer = uploadBuffer.GetBuffer();
+    uint32_t bufferSize = uploadBuffer.GetBufferSize();
+    SDL_BindGPUComputePipeline(computePass, uploadPipeline);
+    SDL_BindGPUComputeStorageBuffers(computePass, 0, &buffer, 1);
+    SDL_PushGPUComputeUniformData(commandBuffer, 0, &bufferSize, sizeof(bufferSize));
+    // TODO:
+    // SDL_PushGPUComputeUniformData(commandBuffer, 0, &particle, sizeof(particle));
+    SDL_DispatchGPUCompute(computePass, groupsX, 1, 1);
+    SDL_EndGPUComputePass(computePass);
+    SDL_SubmitGPUCommandBuffer(commandBuffer);
 }
 
 static void Update()
@@ -344,7 +404,7 @@ int main(int argc, char** argv)
                 if (SDL_GetMouseState(nullptr, nullptr) & SDL_BUTTON_LMASK)
                 {
                     std::lock_guard lock{mutex};
-                    HandleMotion(&event);
+                    Upload(&event);
                 }
                 break;
             }

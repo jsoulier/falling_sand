@@ -11,6 +11,9 @@ layout(set = 1, binding = 0, r32ui) uniform writeonly uimage2D writeImage;
 layout(set = 2, binding = 0) uniform uniformSize
 {
     uint size;
+};
+layout(set = 2, binding = 1) uniform uniformParticle
+{
     uint particle;
 };
 
