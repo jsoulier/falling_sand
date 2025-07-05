@@ -2,7 +2,7 @@
 
 #include "config.hpp"
 
-layout(local_size_x = THREADS, local_size_y = THREADS) in;
+layout(local_size_x = UPDATE_THREADS, local_size_y = UPDATE_THREADS) in;
 
 void main()
 {

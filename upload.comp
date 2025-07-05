@@ -1,0 +1,10 @@
+#version 450
+
+#include "config.hpp"
+
+layout(local_size_x = UPLOAD_THREADS) in;
+
+void main()
+{
+
+}

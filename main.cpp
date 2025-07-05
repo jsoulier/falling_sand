@@ -10,16 +10,19 @@
 
 #include "config.hpp"
 #include "shader.hpp"
+#include "upload_buffer.hpp"
 
 static_assert(FRAMES == 2);
 
 static SDL_Window* window;
 static SDL_GPUDevice* device;
-static SDL_GPUComputePipeline* simulatePipeline;
+static SDL_GPUComputePipeline* updatePipeline;
 static SDL_GPUComputePipeline* clearPipeline;
+static SDL_GPUComputePipeline* uploadPipeline;
 static SDL_GPUGraphicsPipeline* renderPipeline;
-static SDL_GPUTexture* simulateTextures[FRAMES];
+static SDL_GPUTexture* updateTextures[FRAMES];
 static SDL_GPUTexture* renderTexture;
+static UploadBufferCompute<uint32_t> uploadBuffer;
 static volatile uint64_t speed = 1000;
 static volatile int readFrame = 0;
 static volatile int writeFrame = 1;
@@ -68,8 +71,8 @@ static bool Init()
 
 static bool CreatePipelines()
 {
-    SDL_GPUShader* fragShader = LoadShader(device, "render.frag");
-    SDL_GPUShader* vertShader = LoadShader(device, "render.vert");
+    SDL_GPUShader* fragShader = ShaderLoad(device, "render.frag");
+    SDL_GPUShader* vertShader = ShaderLoad(device, "render.vert");
     if (!fragShader || !vertShader)
     {
         SDL_Log("Failed to create shader(s)");
@@ -83,9 +86,10 @@ static bool CreatePipelines()
     info.target_info.color_target_descriptions = &target;
     info.target_info.num_color_targets = 1;
     renderPipeline = SDL_CreateGPUGraphicsPipeline(device, &info);
-    simulatePipeline = LoadComputePipeline(device, "simulate.comp");
-    clearPipeline = LoadComputePipeline(device, "simulate.comp");
-    if (!renderPipeline || !simulatePipeline || !clearPipeline)
+    updatePipeline = ShaderLoadCompute(device, "update.comp");
+    clearPipeline = ShaderLoadCompute(device, "clear.comp");
+    uploadPipeline = ShaderLoadCompute(device, "upload.comp");
+    if (!renderPipeline || !updatePipeline || !clearPipeline || !uploadPipeline)
     {
         SDL_Log("Failed to create pipelines(s): %s", SDL_GetError());
         return false;
@@ -109,8 +113,8 @@ static bool CreateResources()
         info.usage = SDL_GPU_TEXTUREUSAGE_COMPUTE_STORAGE_READ |
             SDL_GPU_TEXTUREUSAGE_COMPUTE_STORAGE_WRITE |
             SDL_GPU_TEXTUREUSAGE_GRAPHICS_STORAGE_READ;
-        simulateTextures[i] = SDL_CreateGPUTexture(device, &info);
-        if (!simulateTextures[i])
+        updateTextures[i] = SDL_CreateGPUTexture(device, &info);
+        if (!updateTextures[i])
         {
             SDL_Log("Failed to create texture: %s", SDL_GetError());
             return false;
@@ -181,7 +185,7 @@ static void Render()
     SDL_SubmitGPUCommandBuffer(commandBuffer);
 }
 
-static void Simulate()
+static void Update()
 {
     SDL_GPUCommandBuffer* commandBuffer = SDL_AcquireGPUCommandBuffer(device);
     if (!commandBuffer)
@@ -225,7 +229,7 @@ int main(int argc, char** argv)
                 SDL_Delay(speed - delta);
             }
             std::lock_guard lock{mutex};
-            Simulate();
+            Update();
         }
     });
     while (running)
@@ -252,11 +256,12 @@ int main(int argc, char** argv)
     thread.join();
     for (int i = 0; i < FRAMES; i++)
     {
-        SDL_ReleaseGPUTexture(device, simulateTextures[i]);
+        SDL_ReleaseGPUTexture(device, updateTextures[i]);
     }
     SDL_ReleaseGPUTexture(device, renderTexture);
+    SDL_ReleaseGPUComputePipeline(device, updatePipeline);
     SDL_ReleaseGPUComputePipeline(device, clearPipeline);
-    SDL_ReleaseGPUComputePipeline(device, simulatePipeline);
+    SDL_ReleaseGPUComputePipeline(device, uploadPipeline);
     SDL_ReleaseGPUGraphicsPipeline(device, renderPipeline);
     ImGui_ImplSDLGPU3_Shutdown();
     ImGui_ImplSDL3_Shutdown();

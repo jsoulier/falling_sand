@@ -1,7 +1,8 @@
 #ifndef CONFIG_HPP
 #define CONFIG_HPP
 
-#define THREADS 16
+#define UPDATE_THREADS 16
+#define UPLOAD_THREADS 128
 #define FRAMES 2
 
 #define WIDTH 960
