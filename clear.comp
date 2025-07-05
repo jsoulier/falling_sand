@@ -1,0 +1,16 @@
+#version 450
+
+#include "config.hpp"
+
+layout(local_size_x = THREADS, local_size_y = THREADS) in;
+
+void main()
+{
+    ivec2 id = ivec2(gl_GlobalInvocationID).xy;
+    if (id.x >= WIDTH || id.y >= HEIGHT)
+    {
+        return;
+    }
+
+    /* TODO: write to write texture */
+}

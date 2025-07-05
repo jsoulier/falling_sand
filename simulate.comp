@@ -1,0 +1,21 @@
+#version 450
+
+#include "config.hpp"
+
+layout(local_size_x = THREADS, local_size_y = THREADS) in;
+
+const ivec2 Offsets[4] = ivec2[](
+    ivec2(0, 0),
+    ivec2(0, 1),
+    ivec2(1, 1),
+    ivec2(1, 0)
+);
+
+void main()
+{
+    ivec2 id = ivec2(gl_GlobalInvocationID).xy /* + Offsets[frame % 4] */;
+    if (id.x >= WIDTH || id.y >= HEIGHT)
+    {
+        return;
+    }
+}
