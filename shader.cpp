@@ -176,7 +176,7 @@ static void* Load(SDL_GPUDevice* device, const std::string_view& name)
         }
         shader = SDL_CreateGPUShader(device, &info);
     }
-    if (shader == nullptr)
+    if (!shader)
     {
         SDL_Log("Failed to create shader: %s", SDL_GetError());
         return nullptr;
@@ -184,12 +184,12 @@ static void* Load(SDL_GPUDevice* device, const std::string_view& name)
     return shader;
 }
 
-SDL_GPUShader* ShaderLoad(SDL_GPUDevice* device, const std::string_view& name)
+SDL_GPUShader* LoadShader(SDL_GPUDevice* device, const std::string_view& name)
 {
     return static_cast<SDL_GPUShader*>(Load(device, name));
 }
 
-SDL_GPUComputePipeline* ShaderLoadCompute(SDL_GPUDevice* device, const std::string_view& name)
+SDL_GPUComputePipeline* LoadComputePipeline(SDL_GPUDevice* device, const std::string_view& name)
 {
     return static_cast<SDL_GPUComputePipeline*>(Load(device, name));
 }

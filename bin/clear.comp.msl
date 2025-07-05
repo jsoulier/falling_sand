@@ -5,7 +5,7 @@ using namespace metal;
 
 constant uint3 gl_WorkGroupSize [[maybe_unused]] = uint3(16u, 16u, 1u);
 
-kernel void main0(uint3 gl_GlobalInvocationID [[thread_position_in_grid]])
+kernel void main0(texture2d<uint, access::write> writeImage [[texture(0)]], uint3 gl_GlobalInvocationID [[thread_position_in_grid]])
 {
     int2 id = int2(int3(gl_GlobalInvocationID).xy);
     bool _26 = id.x >= 960;
@@ -22,5 +22,6 @@ kernel void main0(uint3 gl_GlobalInvocationID [[thread_position_in_grid]])
     {
         return;
     }
+    writeImage.write(uint4(0u), uint2(id));
 }
 

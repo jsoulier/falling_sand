@@ -3,8 +3,26 @@
 #include "config.hpp"
 
 layout(local_size_x = UPLOAD_THREADS) in;
+layout(set = 0, binding = 0) buffer bufferReadBuffer 
+{
+    uint readBuffer[];
+};
+layout(set = 1, binding = 0, r32ui) uniform writeonly uimage2D writeImage;
+layout(set = 2, binding = 0) uniform uniformSize
+{
+    uint size;
+    uint particle;
+};
 
 void main()
 {
-
+    uint id = gl_GlobalInvocationID.x;
+    if (id >= size)
+    {
+        return;
+    }
+    ivec2 position;
+    position.x = int((readBuffer[id] >> 0) & 0xFFFF);
+    position.y = int((readBuffer[id] >> 16) & 0xFFFF);
+    imageStore(writeImage, position, uvec4(particle));
 }
