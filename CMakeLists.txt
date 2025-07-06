@@ -76,12 +76,6 @@ function(add_shader FILE)
     else()
         package(${SPV})
     endif()
-
-    ################
-    # TODO: remove #
-    ################
-    package(${SPV})
-
     package(${JSON})
 endfunction()
 add_shader(clear.comp config.hpp)

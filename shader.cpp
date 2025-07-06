@@ -178,7 +178,7 @@ static void* Load(SDL_GPUDevice* device, const std::string_view& name)
     }
     if (!shader)
     {
-        SDL_Log("Failed to create shader: %s", SDL_GetError());
+        SDL_Log("Failed to create shader: %s, %s", name.data(), SDL_GetError());
         return nullptr;
     }
     return shader;

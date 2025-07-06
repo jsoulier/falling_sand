@@ -1,17 +1,61 @@
+#pragma clang diagnostic ignored "-Wmissing-prototypes"
+#pragma clang diagnostic ignored "-Wmissing-braces"
+
 #include <metal_stdlib>
 #include <simd/simd.h>
 
 using namespace metal;
+
+template<typename T, size_t Num>
+struct spvUnsafeArray
+{
+    T elements[Num ? Num : 1];
+    
+    thread T& operator [] (size_t pos) thread
+    {
+        return elements[pos];
+    }
+    constexpr const thread T& operator [] (size_t pos) const thread
+    {
+        return elements[pos];
+    }
+    
+    device T& operator [] (size_t pos) device
+    {
+        return elements[pos];
+    }
+    constexpr const device T& operator [] (size_t pos) const device
+    {
+        return elements[pos];
+    }
+    
+    constexpr const constant T& operator [] (size_t pos) const constant
+    {
+        return elements[pos];
+    }
+    
+    threadgroup T& operator [] (size_t pos) threadgroup
+    {
+        return elements[pos];
+    }
+    constexpr const threadgroup T& operator [] (size_t pos) const threadgroup
+    {
+        return elements[pos];
+    }
+};
+
+constant spvUnsafeArray<float3, 4> _37 = spvUnsafeArray<float3, 4>({ float3(0.0), float3(1.0), float3(1.0, 1.0, 0.0), float3(1.0) });
 
 struct main0_out
 {
     float4 outColor [[color(0)]];
 };
 
-fragment main0_out main0()
+fragment main0_out main0(texture2d<uint> readImage [[texture(0)]], float4 gl_FragCoord [[position]])
 {
     main0_out out = {};
-    out.outColor = float4(0.0, 0.0, 0.0, 1.0);
+    uint particle = readImage.read(uint2(int2(gl_FragCoord.xy))).x;
+    out.outColor = float4(_37[particle], 1.0);
     return out;
 }
 

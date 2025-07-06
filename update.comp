@@ -3,6 +3,8 @@
 #include "config.hpp"
 
 layout(local_size_x = UPDATE_THREADS, local_size_y = UPDATE_THREADS) in;
+layout(set = 0, binding = 0, r32ui) uniform readonly uimage2D readImage;
+layout(set = 1, binding = 0, r32ui) uniform uimage2D writeImage;
 layout(set = 2, binding = 0) uniform uniformOffset
 {
     uint offset;
@@ -17,9 +19,11 @@ const ivec2 Offsets[4] = ivec2[](
 
 void main()
 {
-    ivec2 id = ivec2(gl_GlobalInvocationID).xy + Offsets[offset % 4];
+    ivec2 id = ivec2(gl_GlobalInvocationID).xy * 2 + Offsets[offset % 4];
     if (id.x >= WIDTH || id.y >= HEIGHT)
     {
         return;
     }
+    uint particle = imageLoad(readImage, id).x;
+    imageStore(writeImage, id, uvec4(particle));
 }

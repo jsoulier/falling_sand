@@ -24,9 +24,13 @@ static SDL_GPUGraphicsPipeline* renderPipeline;
 static SDL_GPUTexture* updateTextures[FRAMES];
 static SDL_GPUTexture* renderTexture;
 static ComputeUploadBuffer<uint32_t> uploadBuffer;
-static volatile uint64_t speed = 1000;
+static uint32_t width;
+static uint32_t height;
+static volatile uint64_t speed = 16;
 static volatile int readFrame = 0;
 static volatile int writeFrame = 1;
+static uint32_t particle = SAND;
+static bool guiFocused;
 
 static bool Init()
 {
@@ -44,9 +48,7 @@ static bool Init()
         return false;
     }
 #if defined(SDL_PLATFORM_WIN32)
-    device = SDL_CreateGPUDevice(SDL_GPU_SHADERFORMAT_SPIRV, true, nullptr);
-    /* TODO: */
-    // device = SDL_CreateGPUDevice(SDL_GPU_SHADERFORMAT_DXIL, true, nullptr);
+    device = SDL_CreateGPUDevice(SDL_GPU_SHADERFORMAT_DXIL, true, nullptr);
 #elif defined(SDL_PLATFORM_APPLE)
     device = SDL_CreateGPUDevice(SDL_GPU_SHADERFORMAT_MSL, true, nullptr);
 #else
@@ -180,8 +182,6 @@ static void Render()
         return;
     }
     SDL_GPUTexture* swapchainTexture;
-    uint32_t width;
-    uint32_t height;
     if (!SDL_AcquireGPUSwapchainTexture(commandBuffer, window, &swapchainTexture, &width, &height))
     {
         SDL_Log("Failed to acquire swapchain texture: %s", SDL_GetError());
@@ -201,6 +201,7 @@ static void Render()
         ImGui_ImplSDLGPU3_NewFrame();
         ImGui::NewFrame();
         ImGui::Begin("Settings");
+        guiFocused = ImGui::IsWindowFocused();
         ImGui::End();
         ImGui::Render();
         ImGui_ImplSDLGPU3_PrepareDrawData(ImGui::GetDrawData(), commandBuffer);
@@ -233,7 +234,7 @@ static void Render()
         info.destination.texture = swapchainTexture;
         info.destination.w = width;
         info.destination.h = height;
-        info.filter = SDL_GPU_FILTER_LINEAR;
+        info.filter = SDL_GPU_FILTER_NEAREST;
         SDL_BlitGPUTexture(commandBuffer, &info);
     }
     {
@@ -262,13 +263,15 @@ static void Upload(SDL_Event* event)
     float y2 = event->motion.y;
     float dx = x2 - x1;
     float dy = y2 - y1;
-    float slope = dy / dx;
     float distance = std::sqrtf(dx * dx + dy * dy);
+    float scaleX = static_cast<float>(WIDTH) / width;
+    float scaleY = static_cast<float>(HEIGHT) / height;
     static constexpr float Step = 1.0f;
-    for (float i = 0; i < dx; i += Step)
+    for (float i = 0.0f; i < distance; i += Step)
     {
-        int x = x2 + i;
-        int y = y2 + slope * i;
+        float t = i / distance;
+        float x = (x1 + t * dx) * scaleX;
+        float y = (y1 + t * dy) * scaleY;
         if (x < 0 || y < 0)
         {
             continue;
@@ -276,8 +279,8 @@ static void Upload(SDL_Event* event)
         assert(x < std::numeric_limits<uint16_t>::max());
         assert(y < std::numeric_limits<uint16_t>::max());
         uint32_t position = 0;
-        position |= x << 0;
-        position |= y << 16;
+        position |= static_cast<uint32_t>(x) << 0;
+        position |= static_cast<uint32_t>(y) << 16;
         uploadBuffer.Emplace(device, position);
     }
     if (!uploadBuffer.GetTransferBufferSize())
@@ -314,8 +317,7 @@ static void Upload(SDL_Event* event)
     SDL_BindGPUComputePipeline(computePass, uploadPipeline);
     SDL_BindGPUComputeStorageBuffers(computePass, 0, &buffer, 1);
     SDL_PushGPUComputeUniformData(commandBuffer, 0, &bufferSize, sizeof(bufferSize));
-    // TODO:
-    // SDL_PushGPUComputeUniformData(commandBuffer, 0, &particle, sizeof(particle));
+    SDL_PushGPUComputeUniformData(commandBuffer, 1, &particle, sizeof(particle));
     SDL_DispatchGPUCompute(computePass, groupsX, 1, 1);
     SDL_EndGPUComputePass(computePass);
     SDL_SubmitGPUCommandBuffer(commandBuffer);
@@ -330,24 +332,25 @@ static void Update()
         return;
     }
     ClearTexture(updateTextures[writeFrame], commandBuffer);
-    // for (uint32_t offset = 0; offset < 4; offset++)
-    // {
-    //     SDL_GPUStorageTextureReadWriteBinding binding{};
-    //     binding.texture = updateTextures[writeFrame];
-    //     SDL_GPUComputePass* computePass = SDL_BeginGPUComputePass(commandBuffer, &binding, 1, nullptr, 0);
-    //     if (!computePass)
-    //     {
-    //         SDL_Log("Failed to begin compute pass: %s", SDL_GetError());
-    //         SDL_CancelGPUCommandBuffer(commandBuffer);
-    //         return;
-    //     }
-    //     int groupsX = (WIDTH / 2 + UPDATE_THREADS - 1) / UPDATE_THREADS;
-    //     int groupsY = (HEIGHT / 2 + UPDATE_THREADS - 1) / UPDATE_THREADS;
-    //     SDL_BindGPUComputePipeline(computePass, updatePipeline);
-    //     SDL_PushGPUComputeUniformData(commandBuffer, 0, &offset, sizeof(offset));
-    //     SDL_DispatchGPUCompute(computePass, groupsX, groupsY, 1);
-    //     SDL_EndGPUComputePass(computePass);
-    // }
+    for (uint32_t offset = 0; offset < 4; offset++)
+    {
+        SDL_GPUStorageTextureReadWriteBinding binding{};
+        binding.texture = updateTextures[writeFrame];
+        SDL_GPUComputePass* computePass = SDL_BeginGPUComputePass(commandBuffer, &binding, 1, nullptr, 0);
+        if (!computePass)
+        {
+            SDL_Log("Failed to begin compute pass: %s", SDL_GetError());
+            SDL_CancelGPUCommandBuffer(commandBuffer);
+            return;
+        }
+        int groupsX = (WIDTH / 2 + UPDATE_THREADS - 1) / UPDATE_THREADS;
+        int groupsY = (HEIGHT / 2 + UPDATE_THREADS - 1) / UPDATE_THREADS;
+        SDL_BindGPUComputePipeline(computePass, updatePipeline);
+        SDL_PushGPUComputeUniformData(commandBuffer, 0, &offset, sizeof(offset));
+        SDL_BindGPUComputeStorageTextures(computePass, 0, &updateTextures[readFrame], 1);
+        SDL_DispatchGPUCompute(computePass, groupsX, groupsY, 1);
+        SDL_EndGPUComputePass(computePass);
+    }
     SDL_SubmitGPUCommandBuffer(commandBuffer);
     readFrame = (readFrame + 1) % FRAMES;
     writeFrame = (writeFrame + 1) % FRAMES;
@@ -401,7 +404,7 @@ int main(int argc, char** argv)
                 running = false;
                 break;
             case SDL_EVENT_MOUSE_MOTION:
-                if (SDL_GetMouseState(nullptr, nullptr) & SDL_BUTTON_LMASK)
+                if (!guiFocused && SDL_GetMouseState(nullptr, nullptr) & SDL_BUTTON_LMASK)
                 {
                     std::lock_guard lock{mutex};
                     Upload(&event);
