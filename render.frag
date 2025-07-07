@@ -12,25 +12,8 @@ const vec3 Colors[4] = vec3[](
     vec3(0.5f, 0.5f, 1.0f)  /* water */
 );
 
-const uint Bitshifts[4] = uint[](
-    PARTICLE0,
-    PARTICLE1,
-    PARTICLE2,
-    PARTICLE3
-);
-
 void main()
 {
-    uint particles = imageLoad(readImage, ivec2(gl_FragCoord.xy)).x;
-    for (int i = 0; i < 4; i++)
-    {
-        uint particle  = (particles >> Bitshifts[i]) & 0xFF;
-        if (particle == EMPTY)
-        {
-            continue;
-        }
-        outColor = vec4(Colors[particle], 1.0f);
-        return;
-    }
-    outColor = vec4(Colors[EMPTY], 1.0f);
+    uint particle = imageLoad(readImage, ivec2(gl_FragCoord.xy)).x;
+    outColor = vec4(Colors[particle], 1.0f);
 }

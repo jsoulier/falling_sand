@@ -1,3 +1,2 @@
 [ ] letterbox
 [ ] blur pass
-[ ] losing too many particles to race conditions

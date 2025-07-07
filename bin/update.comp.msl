@@ -1,10 +1,8 @@
 #pragma clang diagnostic ignored "-Wmissing-prototypes"
 #pragma clang diagnostic ignored "-Wmissing-braces"
-#pragma clang diagnostic ignored "-Wunused-variable"
 
 #include <metal_stdlib>
 #include <simd/simd.h>
-#include <metal_atomic>
 
 using namespace metal;
 
@@ -46,58 +44,52 @@ struct spvUnsafeArray
     }
 };
 
-// The required alignment of a linear texture of R32Uint format.
-constant uint spvLinearTextureAlignmentOverride [[function_constant(65535)]];
-constant uint spvLinearTextureAlignment = is_function_constant_defined(spvLinearTextureAlignmentOverride) ? spvLinearTextureAlignmentOverride : 4;
-// Returns buffer coords corresponding to 2D texture coords for emulating 2D texture atomics
-#define spvImage2DAtomicCoord(tc, tex) (((((tex).get_width() +  spvLinearTextureAlignment / 4 - 1) & ~( spvLinearTextureAlignment / 4 - 1)) * (tc).y) + (tc).x)
+struct uniformOffset
+{
+    uint offset;
+};
 
 struct uniformTime
 {
     int time;
 };
 
-struct uniformOffset
-{
-    uint offset;
-};
-
 constant uint3 gl_WorkGroupSize [[maybe_unused]] = uint3(16u, 16u, 1u);
 
-constant spvUnsafeArray<int2, 4> _290 = spvUnsafeArray<int2, 4>({ int2(0), int2(0, 1), int2(1), int2(1, 0) });
+constant spvUnsafeArray<int2, 4> _184 = spvUnsafeArray<int2, 4>({ int2(0), int2(0, 1), int2(1), int2(1, 0) });
 
 static inline __attribute__((always_inline))
 bool contains(thread const int2& position)
 {
-    bool _132 = position.x >= 0;
-    bool _138;
+    bool _126 = position.x >= 0;
+    bool _132;
+    if (_126)
+    {
+        _132 = position.y >= 0;
+    }
+    else
+    {
+        _132 = _126;
+    }
+    bool _139;
     if (_132)
     {
-        _138 = position.y >= 0;
+        _139 = position.x < 960;
     }
     else
     {
-        _138 = _132;
+        _139 = _132;
     }
-    bool _145;
-    if (_138)
+    bool _146;
+    if (_139)
     {
-        _145 = position.x < 960;
+        _146 = position.y < 720;
     }
     else
     {
-        _145 = _138;
+        _146 = _139;
     }
-    bool _152;
-    if (_145)
-    {
-        _152 = position.y < 720;
-    }
-    else
-    {
-        _152 = _145;
-    }
-    return _152;
+    return _146;
 }
 
 static inline __attribute__((always_inline))
@@ -115,12 +107,12 @@ static inline __attribute__((always_inline))
 uint hash(thread const uint3& v)
 {
     uint param = v.y;
-    uint _87 = hash(param);
+    uint _81 = hash(param);
     uint param_1 = v.z;
-    uint _93 = hash(param_1);
-    uint param_2 = (v.x ^ _87) ^ _93;
-    uint _96 = hash(param_2);
-    return _96;
+    uint _87 = hash(param_1);
+    uint param_2 = (v.x ^ _81) ^ _87;
+    uint _90 = hash(param_2);
+    return _90;
 }
 
 static inline __attribute__((always_inline))
@@ -137,8 +129,8 @@ float random(thread const float3& v)
 {
     uint3 param = as_type<uint3>(v);
     uint param_1 = hash(param);
-    float _119 = floatConstruct(param_1);
-    return _119;
+    float _113 = floatConstruct(param_1);
+    return _113;
 }
 
 static inline __attribute__((always_inline))
@@ -152,30 +144,40 @@ static inline __attribute__((always_inline))
 bool empty(thread const int2& position, texture2d<uint> readImage)
 {
     int2 param = position;
-    bool _157 = contains(param);
-    bool _169;
-    if (_157)
+    bool _151 = contains(param);
+    bool _163;
+    if (_151)
     {
-        _169 = readImage.read(uint2(position)).x == 0u;
+        _163 = readImage.read(uint2(position)).x == 0u;
     }
     else
     {
-        _169 = _157;
+        _163 = _151;
     }
-    return _169;
+    return _163;
 }
 
-static inline __attribute__((always_inline))
-void simulate(thread const int2& position, thread const uint& particles, thread const uint& bitshift, texture2d<uint> readImage, constant uniformTime& _184, texture2d<uint> writeImage, device atomic_uint* writeImage_atomic)
+kernel void main0(constant uniformOffset& _187 [[buffer(0)]], constant uniformTime& _218 [[buffer(1)]], texture2d<uint> readImage [[texture(0)]], texture2d<uint, access::write> writeImage [[texture(1)]], uint3 gl_GlobalInvocationID [[thread_position_in_grid]])
 {
-    uint particle = (particles >> bitshift) & 255u;
+    int2 position = (int2(int3(gl_GlobalInvocationID).xy) * int2(2)) + _184[_187.offset % 4u];
+    int2 param = position;
+    if (!contains(param))
+    {
+        return;
+    }
+    uint particle = readImage.read(uint2(position)).x;
     switch (particle)
     {
+        case 0u:
+        case 1u:
+        {
+            break;
+        }
         case 2u:
         {
-            int3 param = int3(position, _184.time);
+            int3 param_1 = int3(position, _218.time);
             int neighborDirection;
-            if (random(param) > 0.5)
+            if (random(param_1) > 0.5)
             {
                 neighborDirection = -1;
             }
@@ -183,66 +185,24 @@ void simulate(thread const int2& position, thread const uint& particles, thread 
             {
                 neighborDirection = 1;
             }
-            spvUnsafeArray<int2, 3> _216 = spvUnsafeArray<int2, 3>({ position + int2(0, 1), position + int2(-neighborDirection, 1), position + int2(neighborDirection, 1) });
-            spvUnsafeArray<int2, 3> neighbors = _216;
-            uint bitshift_1;
+            spvUnsafeArray<int2, 3> _248 = spvUnsafeArray<int2, 3>({ position + int2(0, 1), position + int2(-neighborDirection, 1), position + int2(neighborDirection, 1) });
+            spvUnsafeArray<int2, 3> neighbors = _248;
             for (int i = 0; i < 3; i++)
             {
-                int2 param_1 = neighbors[i];
-                if (!empty(param_1, readImage))
+                int2 param_2 = neighbors[i];
+                if (empty(param_2, readImage))
                 {
-                    continue;
+                    writeImage.write(uint4(particle), uint2(neighbors[i]));
+                    return;
                 }
-                if (neighbors[i].x < 0)
-                {
-                    bitshift_1 = 16u;
-                }
-                else
-                {
-                    if (neighbors[i].x > 0)
-                    {
-                        bitshift_1 = 24u;
-                    }
-                    else
-                    {
-                        bitshift_1 = 8u;
-                    }
-                }
-                particle = 2u << bitshift_1;
-                uint _262 = atomic_fetch_or_explicit((device atomic_uint*)&writeImage_atomic[spvImage2DAtomicCoord(neighbors[i], writeImage)], particle, memory_order_relaxed);
-                return;
             }
-            particle = 2u << bitshift;
-            uint _271 = atomic_fetch_or_explicit((device atomic_uint*)&writeImage_atomic[spvImage2DAtomicCoord(position, writeImage)], particle, memory_order_relaxed);
+            writeImage.write(uint4(particle), uint2(position));
+            break;
+        }
+        case 3u:
+        {
             break;
         }
     }
-}
-
-kernel void main0(constant uniformOffset& _293 [[buffer(0)]], constant uniformTime& _184 [[buffer(1)]], texture2d<uint> readImage [[texture(0)]], texture2d<uint> writeImage [[texture(1)]], device atomic_uint* writeImage_atomic [[buffer(32767)]], uint3 gl_GlobalInvocationID [[thread_position_in_grid]])
-{
-    int2 position = (int2(int3(gl_GlobalInvocationID).xy) * int2(2)) + _290[_293.offset % 4u];
-    int2 param = position;
-    if (!contains(param))
-    {
-        return;
-    }
-    uint particles = readImage.read(uint2(position)).x;
-    int2 param_1 = position;
-    uint param_2 = particles;
-    uint param_3 = 0u;
-    simulate(param_1, param_2, param_3, readImage, _184, writeImage, writeImage_atomic);
-    int2 param_4 = position;
-    uint param_5 = particles;
-    uint param_6 = 8u;
-    simulate(param_4, param_5, param_6, readImage, _184, writeImage, writeImage_atomic);
-    int2 param_7 = position;
-    uint param_8 = particles;
-    uint param_9 = 16u;
-    simulate(param_7, param_8, param_9, readImage, _184, writeImage, writeImage_atomic);
-    int2 param_10 = position;
-    uint param_11 = particles;
-    uint param_12 = 24u;
-    simulate(param_10, param_11, param_12, readImage, _184, writeImage, writeImage_atomic);
 }
 

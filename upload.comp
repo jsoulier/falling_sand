@@ -3,11 +3,11 @@
 #include "config.hpp"
 
 layout(local_size_x = UPLOAD_THREADS) in;
-layout(set = 0, binding = 0) buffer readonly bufferReadBuffer 
+layout(set = 0, binding = 0) buffer readonly bufferParticles
 {
-    uint readBuffer[];
+    uint particles[];
 };
-layout(set = 1, binding = 0, r32ui) uniform uimage2D writeImage;
+layout(set = 1, binding = 0, r8ui) uniform uimage2D writeImage;
 layout(set = 2, binding = 0) uniform uniformSize
 {
     uint size;
@@ -28,12 +28,11 @@ void main()
     {
         return;
     }
-    int cx = int((readBuffer[id] >> 0) & 0xFFFF);
-    int cy = int((readBuffer[id] >> 16) & 0xFFFF);
+    int cx = int((particles[id] >> 0) & 0xFFFF);
+    int cy = int((particles[id] >> 16) & 0xFFFF);
     for (int dx = -radius; dx <= radius; dx++)
     for (int dy = -radius; dy <= radius; dy++)
     {
-        /* NOTE: using >= since smallest radius is 1 (not 0) */
         if (length(ivec2(dx, dy)) >= radius)
         {
             continue;

@@ -154,7 +154,7 @@ static bool CreateResources()
     info.num_levels = 1;
     for (int i = 0; i < FRAMES; i++)
     {
-        info.format = SDL_GPU_TEXTUREFORMAT_R32_UINT;
+        info.format = SDL_GPU_TEXTUREFORMAT_R8_UINT;
         info.usage = SDL_GPU_TEXTUREUSAGE_COMPUTE_STORAGE_READ |
             SDL_GPU_TEXTUREUSAGE_COMPUTE_STORAGE_WRITE |
             SDL_GPU_TEXTUREUSAGE_GRAPHICS_STORAGE_READ;
@@ -194,7 +194,7 @@ static void RenderImGui(SDL_GPUCommandBuffer* commandBuffer)
     ImGui::Begin("Settings");
     imguiFocused = ImGui::IsWindowFocused();
     int speedInt = speed;
-    ImGui::SliderInt("Simulation Delay", &speedInt, 0, 1000);
+    ImGui::SliderInt("Simulation Delay", &speedInt, 16, 1000);
     speed = speedInt;
     ImGui::SliderInt("Brush Radius", &radius, 1, 30);
     for (const auto& [string, id] : Particles)
