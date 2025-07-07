@@ -44,7 +44,8 @@ struct spvUnsafeArray
     }
 };
 
-constant spvUnsafeArray<float3, 4> _37 = spvUnsafeArray<float3, 4>({ float3(0.0), float3(1.0), float3(1.0, 1.0, 0.0), float3(1.0) });
+constant spvUnsafeArray<uint, 4> _46 = spvUnsafeArray<uint, 4>({ 0u, 8u, 16u, 24u });
+constant spvUnsafeArray<float3, 4> _71 = spvUnsafeArray<float3, 4>({ float3(0.0), float3(0.5), float3(1.0, 1.0, 0.0), float3(0.5, 0.5, 1.0) });
 
 struct main0_out
 {
@@ -54,8 +55,18 @@ struct main0_out
 fragment main0_out main0(texture2d<uint> readImage [[texture(0)]], float4 gl_FragCoord [[position]])
 {
     main0_out out = {};
-    uint particle = readImage.read(uint2(int2(gl_FragCoord.xy))).x;
-    out.outColor = float4(_37[particle], 1.0);
+    uint particles = readImage.read(uint2(int2(gl_FragCoord.xy))).x;
+    for (int i = 0; i < 4; i++)
+    {
+        uint particle = (particles >> _46[i]) & 255u;
+        if (particle == 0u)
+        {
+            continue;
+        }
+        out.outColor = float4(_71[particle], 1.0);
+        return out;
+    }
+    out.outColor = float4(0.0, 0.0, 0.0, 1.0);
     return out;
 }
 

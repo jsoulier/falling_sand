@@ -1,6 +1,7 @@
 #version 450
 
 #include "config.hpp"
+#include "random.glsl"
 
 layout(local_size_x = UPDATE_THREADS, local_size_y = UPDATE_THREADS) in;
 layout(set = 0, binding = 0, r32ui) uniform readonly uimage2D readImage;
@@ -8,6 +9,10 @@ layout(set = 1, binding = 0, r32ui) uniform uimage2D writeImage;
 layout(set = 2, binding = 0) uniform uniformOffset
 {
     uint offset;
+};
+layout(set = 2, binding = 1) uniform uniformTime
+{
+    int time;
 };
 
 const ivec2 Offsets[4] = ivec2[](
@@ -17,13 +22,77 @@ const ivec2 Offsets[4] = ivec2[](
     ivec2(1, 0)
 );
 
+bool contains(ivec2 position)
+{
+    return position.x >= 0 && position.y >= 0 && position.x < WIDTH && position.y < HEIGHT;
+}
+
+bool empty(ivec2 position)
+{
+    return contains(position) && imageLoad(readImage, position).x == EMPTY;
+}
+
+void simulate(ivec2 position, uint particles, uint bitshift)
+{
+    uint particle = (particles >> bitshift) & 0xFF;
+    switch (particle)
+    {
+    case SAND:
+        {
+            int neighborDirection;
+            if (random(ivec3(position, time)) > 0.5f)
+            {
+                neighborDirection = -1;
+            }
+            else
+            {
+                neighborDirection = 1;
+            }
+            ivec2 neighbors[3] = ivec2[](
+                position + ivec2(0, 1),
+                position + ivec2(-neighborDirection, 1),
+                position + ivec2(neighborDirection, 1)
+            );
+            for (int i = 0; i < 3; i++)
+            {
+                if (!empty(neighbors[i]))
+                {
+                    continue;
+                }
+                uint bitshift;
+                if (neighbors[i].x < 0)
+                {
+                    bitshift = PARTICLEL;
+                }
+                else if (neighbors[i].x > 0)
+                {
+                    bitshift = PARTICLER;
+                }
+                else
+                {
+                    bitshift = PARTICLED;
+                }
+                particle = SAND << bitshift;
+                imageAtomicOr(writeImage, neighbors[i], particle);
+                return;
+            }
+            particle = SAND << bitshift;
+            imageAtomicOr(writeImage, position, particle);
+        }
+        break;
+    }
+}
+
 void main()
 {
-    ivec2 id = ivec2(gl_GlobalInvocationID).xy * 2 + Offsets[offset % 4];
-    if (id.x >= WIDTH || id.y >= HEIGHT)
+    ivec2 position = ivec2(gl_GlobalInvocationID).xy * 2 + Offsets[offset % 4];
+    if (!contains(position))
     {
         return;
     }
-    uint particle = imageLoad(readImage, id).x;
-    imageStore(writeImage, id, uvec4(particle));
+    uint particles = imageLoad(readImage, position).x;
+    simulate(position, particles, PARTICLE0);
+    simulate(position, particles, PARTICLE1);
+    simulate(position, particles, PARTICLE2);
+    simulate(position, particles, PARTICLE3);
 }

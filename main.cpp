@@ -4,16 +4,20 @@
 #include <imgui_impl_sdl3.h>
 #include <imgui_impl_sdlgpu3.h>
 
+#include <cmath>
 #include <cstdint>
 #include <limits>
 #include <mutex>
+#include <string>
 #include <thread>
+#include <unordered_map>
 
 #include "config.hpp"
 #include "shader.hpp"
 #include "upload_buffer.hpp"
 
 static_assert(FRAMES == 2);
+static_assert(EMPTY == 0);
 
 static SDL_Window* window;
 static SDL_GPUDevice* device;
@@ -26,11 +30,12 @@ static SDL_GPUTexture* renderTexture;
 static ComputeUploadBuffer<uint32_t> uploadBuffer;
 static uint32_t width;
 static uint32_t height;
-static volatile uint64_t speed = 16;
+static volatile int speed = 16;
 static volatile int readFrame = 0;
 static volatile int writeFrame = 1;
 static uint32_t particle = SAND;
-static bool guiFocused;
+static int radius = 3;
+static bool imguiFocused;
 
 static bool Init()
 {
@@ -172,6 +177,39 @@ static bool CreateResources()
     return true;
 }
 
+static void RenderImGui(SDL_GPUCommandBuffer* commandBuffer)
+{
+    static const std::unordered_map<std::string, int> Particles =
+    {
+        {"Empty", EMPTY},
+        {"Stone", STONE},
+        {"Sand", SAND},
+        {"Water", WATER},
+    };
+    ImGuiIO& io = ImGui::GetIO();
+    io.DisplaySize.x = width;
+    io.DisplaySize.y = height;
+    ImGui_ImplSDLGPU3_NewFrame();
+    ImGui::NewFrame();
+    ImGui::Begin("Settings");
+    imguiFocused = ImGui::IsWindowFocused();
+    int speedInt = speed;
+    ImGui::SliderInt("Simulation Delay", &speedInt, 0, 1000);
+    speed = speedInt;
+    ImGui::SliderInt("Brush Radius", &radius, 1, 30);
+    for (const auto& [string, id] : Particles)
+    {
+        if (ImGui::Button(string.data()))
+        {
+            particle = id;
+            break;
+        }
+    }
+    ImGui::End();
+    ImGui::Render();
+    ImGui_ImplSDLGPU3_PrepareDrawData(ImGui::GetDrawData(), commandBuffer);
+}
+
 static void Render()
 {
     SDL_WaitForGPUSwapchain(device, window);
@@ -194,18 +232,7 @@ static void Render()
         SDL_SubmitGPUCommandBuffer(commandBuffer);
         return;
     }
-    {
-        ImGuiIO& io = ImGui::GetIO();
-        io.DisplaySize.x = width;
-        io.DisplaySize.y = height;
-        ImGui_ImplSDLGPU3_NewFrame();
-        ImGui::NewFrame();
-        ImGui::Begin("Settings");
-        guiFocused = ImGui::IsWindowFocused();
-        ImGui::End();
-        ImGui::Render();
-        ImGui_ImplSDLGPU3_PrepareDrawData(ImGui::GetDrawData(), commandBuffer);
-    }
+    RenderImGui(commandBuffer);
     {
         SDL_GPUColorTargetInfo info{};
         info.texture = renderTexture;
@@ -255,15 +282,15 @@ static void Render()
     SDL_SubmitGPUCommandBuffer(commandBuffer);
 }
 
-static void Upload(SDL_Event* event)
+static void Upload(float x1, float y1, float x2, float y2)
 {
-    float x1 = event->motion.x - event->motion.xrel;
-    float y1 = event->motion.y - event->motion.yrel;
-    float x2 = event->motion.x;
-    float y2 = event->motion.y;
     float dx = x2 - x1;
     float dy = y2 - y1;
     float distance = std::sqrtf(dx * dx + dy * dy);
+    if (distance < std::numeric_limits<float>::epsilon())
+    {
+        distance = 1.0f;
+    }
     float scaleX = static_cast<float>(WIDTH) / width;
     float scaleY = static_cast<float>(HEIGHT) / height;
     static constexpr float Step = 1.0f;
@@ -272,12 +299,6 @@ static void Upload(SDL_Event* event)
         float t = i / distance;
         float x = (x1 + t * dx) * scaleX;
         float y = (y1 + t * dy) * scaleY;
-        if (x < 0 || y < 0)
-        {
-            continue;
-        }
-        assert(x < std::numeric_limits<uint16_t>::max());
-        assert(y < std::numeric_limits<uint16_t>::max());
         uint32_t position = 0;
         position |= static_cast<uint32_t>(x) << 0;
         position |= static_cast<uint32_t>(y) << 16;
@@ -314,10 +335,12 @@ static void Upload(SDL_Event* event)
     int groupsX = (uploadBuffer.GetBufferSize() + UPLOAD_THREADS - 1) / UPLOAD_THREADS;
     SDL_GPUBuffer* buffer = uploadBuffer.GetBuffer();
     uint32_t bufferSize = uploadBuffer.GetBufferSize();
+    int32_t radius32 = radius;
     SDL_BindGPUComputePipeline(computePass, uploadPipeline);
     SDL_BindGPUComputeStorageBuffers(computePass, 0, &buffer, 1);
     SDL_PushGPUComputeUniformData(commandBuffer, 0, &bufferSize, sizeof(bufferSize));
     SDL_PushGPUComputeUniformData(commandBuffer, 1, &particle, sizeof(particle));
+    SDL_PushGPUComputeUniformData(commandBuffer, 2, &radius, sizeof(radius));
     SDL_DispatchGPUCompute(computePass, groupsX, 1, 1);
     SDL_EndGPUComputePass(computePass);
     SDL_SubmitGPUCommandBuffer(commandBuffer);
@@ -345,9 +368,11 @@ static void Update()
         }
         int groupsX = (WIDTH / 2 + UPDATE_THREADS - 1) / UPDATE_THREADS;
         int groupsY = (HEIGHT / 2 + UPDATE_THREADS - 1) / UPDATE_THREADS;
+        int32_t time = SDL_GetTicks();
         SDL_BindGPUComputePipeline(computePass, updatePipeline);
-        SDL_PushGPUComputeUniformData(commandBuffer, 0, &offset, sizeof(offset));
         SDL_BindGPUComputeStorageTextures(computePass, 0, &updateTextures[readFrame], 1);
+        SDL_PushGPUComputeUniformData(commandBuffer, 0, &offset, sizeof(offset));
+        SDL_PushGPUComputeUniformData(commandBuffer, 1, &time, sizeof(time));
         SDL_DispatchGPUCompute(computePass, groupsX, groupsY, 1);
         SDL_EndGPUComputePass(computePass);
     }
@@ -404,10 +429,14 @@ int main(int argc, char** argv)
                 running = false;
                 break;
             case SDL_EVENT_MOUSE_MOTION:
-                if (!guiFocused && SDL_GetMouseState(nullptr, nullptr) & SDL_BUTTON_LMASK)
+                if (!imguiFocused && event.motion.state & SDL_BUTTON_LMASK)
                 {
+                    float x1 = event.motion.x - event.motion.xrel;
+                    float y1 = event.motion.y - event.motion.yrel;
+                    float x2 = event.motion.x;
+                    float y2 = event.motion.y;
                     std::lock_guard lock{mutex};
-                    Upload(&event);
+                    Upload(x1, y1, x2, y2);
                 }
                 break;
             }
@@ -417,6 +446,12 @@ int main(int argc, char** argv)
             break;
         }
         std::lock_guard lock{mutex};
+        float x;
+        float y;
+        if (!imguiFocused && SDL_GetMouseState(&x, &y) & SDL_BUTTON_LMASK)
+        {
+            Upload(x, y, x, y);
+        }
         Render();
     }
     SDL_HideWindow(window);

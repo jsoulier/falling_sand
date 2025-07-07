@@ -13,6 +13,11 @@ struct bufferReadBuffer
     uint readBuffer[1];
 };
 
+struct uniformRadius
+{
+    int radius;
+};
+
 struct uniformParticle
 {
     uint particle;
@@ -20,16 +25,32 @@ struct uniformParticle
 
 constant uint3 gl_WorkGroupSize [[maybe_unused]] = uint3(128u, 1u, 1u);
 
-kernel void main0(constant uniformSize& _19 [[buffer(0)]], constant uniformParticle& _62 [[buffer(1)]], const device bufferReadBuffer& _36 [[buffer(2)]], texture2d<uint, access::write> writeImage [[texture(0)]], uint3 gl_GlobalInvocationID [[thread_position_in_grid]])
+kernel void main0(constant uniformSize& _19 [[buffer(0)]], constant uniformParticle& _128 [[buffer(1)]], constant uniformRadius& _54 [[buffer(2)]], const device bufferReadBuffer& _35 [[buffer(3)]], texture2d<uint, access::write> writeImage [[texture(0)]], uint3 gl_GlobalInvocationID [[thread_position_in_grid]])
 {
     uint id = gl_GlobalInvocationID.x;
     if (id >= _19.size)
     {
         return;
     }
-    int2 position;
-    position.x = int((_36.readBuffer[id] >> uint(0)) & 65535u);
-    position.y = int((_36.readBuffer[id] >> uint(16)) & 65535u);
-    writeImage.write(uint4(_62.particle), uint2(position));
+    int cx = int((_35.readBuffer[id] >> uint(0)) & 65535u);
+    int cy = int((_35.readBuffer[id] >> uint(16)) & 65535u);
+    int _58 = -_54.radius;
+    for (int dx = _58; dx <= _54.radius; dx++)
+    {
+        int _71 = -_54.radius;
+        for (int dy = _71; dy <= _54.radius; dy++)
+        {
+            if (length(float2(int2(dx, dy))) >= float(_54.radius))
+            {
+                continue;
+            }
+            int x = cx + dx;
+            int y = cy + dy;
+            if ((((x >= 0) && (y >= 0)) && (x < 960)) && (y < 720))
+            {
+                writeImage.write(uint4(_128.particle), uint2(int2(x, y)));
+            }
+        }
+    }
 }
 

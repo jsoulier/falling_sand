@@ -8,10 +8,10 @@
 #define WIDTH 960
 #define HEIGHT 720
 
-#define EMPTY 0
-#define STONE 1
-#define SAND 2
-#define WATER 3
+#define EMPTY 0u
+#define STONE 1u
+#define SAND 2u
+#define WATER 3u
 
 /* 4 particles per uint */
 #define PARTICLE0 0
