@@ -24,8 +24,8 @@ static SDL_GPUDevice* device;
 static SDL_GPUComputePipeline* updatePipeline;
 static SDL_GPUComputePipeline* clearPipeline;
 static SDL_GPUComputePipeline* uploadPipeline;
+static SDL_GPUComputePipeline* blurPipeline;
 static SDL_GPUGraphicsPipeline* renderPipeline;
-static SDL_GPUGraphicsPipeline* blurPipeline;
 static SDL_GPUTexture* updateTextures[FRAMES];
 static SDL_GPUTexture* renderTexture;
 static SDL_GPUTexture* blurTexture;
@@ -48,7 +48,7 @@ static bool Init()
         SDL_Log("Failed to initialize SDL: %s", SDL_GetError());
         return false;
     }
-    window = SDL_CreateWindow("Falling Sand", WIDTH, HEIGHT, SDL_WINDOW_RESIZABLE);
+    window = SDL_CreateWindow("Falling Sand", WIDTH * 3, HEIGHT * 3, SDL_WINDOW_RESIZABLE);
     if (!window)
     {
         SDL_Log("Failed to create window: %s", SDL_GetError());
@@ -85,8 +85,7 @@ static bool CreatePipelines()
 {
     SDL_GPUShader* renderShader = LoadShader(device, "render.frag");
     SDL_GPUShader* fullscreenShader = LoadShader(device, "fullscreen.vert");
-    SDL_GPUShader* blurShader = LoadShader(device, "blur.frag");
-    if (!renderShader || !fullscreenShader || !blurShader)
+    if (!renderShader || !fullscreenShader)
     {
         SDL_Log("Failed to create shader(s)");
         return false;
@@ -99,19 +98,17 @@ static bool CreatePipelines()
     info.target_info.color_target_descriptions = &target;
     info.target_info.num_color_targets = 1;
     renderPipeline = SDL_CreateGPUGraphicsPipeline(device, &info);
-    info.fragment_shader = blurShader;
-    blurPipeline = SDL_CreateGPUGraphicsPipeline(device, &info);
     updatePipeline = LoadComputePipeline(device, "update.comp");
     clearPipeline = LoadComputePipeline(device, "clear.comp");
     uploadPipeline = LoadComputePipeline(device, "upload.comp");
-    if (!renderPipeline || !blurPipeline || !updatePipeline || !clearPipeline || !uploadPipeline)
+    blurPipeline = LoadComputePipeline(device, "blur.comp");
+    if (!renderPipeline || !updatePipeline || !clearPipeline || !uploadPipeline || !blurPipeline)
     {
         SDL_Log("Failed to create pipelines(s): %s", SDL_GetError());
         return false;
     }
     SDL_ReleaseGPUShader(device, renderShader);
     SDL_ReleaseGPUShader(device, fullscreenShader);
-    SDL_ReleaseGPUShader(device, blurShader);
     return true;
 }
 
@@ -173,14 +170,15 @@ static bool CreateTextures()
         ClearTexture(updateTextures[i]);
     }
     info.format = SDL_GetGPUSwapchainTextureFormat(device, window);
-    info.usage = SDL_GPU_TEXTUREUSAGE_COLOR_TARGET | SDL_GPU_TEXTUREUSAGE_GRAPHICS_STORAGE_READ;
+    info.usage = SDL_GPU_TEXTUREUSAGE_COLOR_TARGET | SDL_GPU_TEXTUREUSAGE_SAMPLER;
     renderTexture = SDL_CreateGPUTexture(device, &info);
     if (!renderTexture)
     {
         SDL_Log("Failed to create texture: %s", SDL_GetError());
         return false;
     }
-    info.usage = SDL_GPU_TEXTUREUSAGE_COLOR_TARGET | SDL_GPU_TEXTUREUSAGE_SAMPLER;
+    info.format = SDL_GPU_TEXTUREFORMAT_R8_UINT;
+    info.usage = SDL_GPU_TEXTUREUSAGE_COMPUTE_STORAGE_WRITE | SDL_GPU_TEXTUREUSAGE_GRAPHICS_STORAGE_READ;
     blurTexture = SDL_CreateGPUTexture(device, &info);
     if (!blurTexture)
     {
@@ -247,6 +245,23 @@ static void Render()
     }
     RenderImGui(commandBuffer);
     {
+        SDL_GPUStorageTextureReadWriteBinding binding{};
+        binding.texture = blurTexture;
+        SDL_GPUComputePass* computePass = SDL_BeginGPUComputePass(commandBuffer, &binding, 1, nullptr, 0);
+        if (!computePass)
+        {
+            SDL_Log("Failed to begin compute pass: %s", SDL_GetError());
+            SDL_SubmitGPUCommandBuffer(commandBuffer);
+            return;
+        }
+        int groupsX = (WIDTH + UPDATE_THREADS - 1) / UPDATE_THREADS;
+        int groupsY = (HEIGHT + UPDATE_THREADS - 1) / UPDATE_THREADS;
+        SDL_BindGPUComputePipeline(computePass, blurPipeline);
+        SDL_BindGPUComputeStorageTextures(computePass, 0, &updateTextures[readFrame], 1);
+        SDL_DispatchGPUCompute(computePass, groupsX, groupsY, 1);
+        SDL_EndGPUComputePass(computePass);
+    }
+    {
         SDL_GPUColorTargetInfo info{};
         info.texture = renderTexture;
         info.load_op = SDL_GPU_LOADOP_DONT_CARE;
@@ -260,33 +275,14 @@ static void Render()
             return;
         }
         SDL_BindGPUGraphicsPipeline(renderPass, renderPipeline);
-        /* TODO: which is better, read or write? */
-        SDL_BindGPUFragmentStorageTextures(renderPass, 0, &updateTextures[readFrame], 1);
-        SDL_DrawGPUPrimitives(renderPass, 4, 1, 0, 0);
-        SDL_EndGPURenderPass(renderPass);
-    }
-    {
-        SDL_GPUColorTargetInfo info{};
-        info.texture = blurTexture;
-        info.load_op = SDL_GPU_LOADOP_DONT_CARE;
-        info.store_op = SDL_GPU_STOREOP_STORE;
-        info.cycle = true;
-        SDL_GPURenderPass* renderPass = SDL_BeginGPURenderPass(commandBuffer, &info, 1, nullptr);
-        if (!renderPass)
-        {
-            SDL_Log("Failed to begin render pass: %s", SDL_GetError());
-            SDL_SubmitGPUCommandBuffer(commandBuffer);
-            return;
-        }
-        SDL_BindGPUGraphicsPipeline(renderPass, blurPipeline);
-        SDL_BindGPUFragmentStorageTextures(renderPass, 0, &renderTexture, 1);
+        SDL_BindGPUFragmentStorageTextures(renderPass, 0, &blurTexture, 1);
         SDL_DrawGPUPrimitives(renderPass, 4, 1, 0, 0);
         SDL_EndGPURenderPass(renderPass);
     }
     {
         SDL_GPUBlitInfo info{};
         info.load_op = SDL_GPU_LOADOP_DONT_CARE;
-        info.source.texture = blurTexture;
+        info.source.texture = renderTexture;
         info.source.w = WIDTH;
         info.source.h = HEIGHT;
         info.destination.texture = swapchainTexture;
@@ -386,7 +382,7 @@ static void Update()
         return;
     }
     ClearTexture(updateTextures[writeFrame], commandBuffer);
-    for (uint32_t offset = 0; offset < 4; offset++)
+    for (uint32_t offset = 0; offset < 9; offset++)
     {
         SDL_GPUStorageTextureReadWriteBinding binding{};
         binding.texture = updateTextures[writeFrame];
@@ -397,8 +393,8 @@ static void Update()
             SDL_CancelGPUCommandBuffer(commandBuffer);
             return;
         }
-        int groupsX = (WIDTH / 2 + UPDATE_THREADS - 1) / UPDATE_THREADS;
-        int groupsY = (HEIGHT / 2 + UPDATE_THREADS - 1) / UPDATE_THREADS;
+        int groupsX = (WIDTH / 3 + UPDATE_THREADS - 1) / UPDATE_THREADS;
+        int groupsY = (HEIGHT / 3 + UPDATE_THREADS - 1) / UPDATE_THREADS;
         int32_t time = SDL_GetTicks();
         SDL_BindGPUComputePipeline(computePass, updatePipeline);
         SDL_BindGPUComputeStorageTextures(computePass, 0, &updateTextures[readFrame], 1);
@@ -497,8 +493,8 @@ int main(int argc, char** argv)
     SDL_ReleaseGPUComputePipeline(device, updatePipeline);
     SDL_ReleaseGPUComputePipeline(device, clearPipeline);
     SDL_ReleaseGPUComputePipeline(device, uploadPipeline);
+    SDL_ReleaseGPUComputePipeline(device, blurPipeline);
     SDL_ReleaseGPUGraphicsPipeline(device, renderPipeline);
-    SDL_ReleaseGPUGraphicsPipeline(device, blurPipeline);
     ImGui_ImplSDLGPU3_Shutdown();
     ImGui_ImplSDL3_Shutdown();
     ImGui::DestroyContext();

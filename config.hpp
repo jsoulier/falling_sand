@@ -5,8 +5,8 @@
 #define UPLOAD_THREADS 128
 #define FRAMES 2
 
-#define WIDTH 960
-#define HEIGHT 720
+#define WIDTH 480
+#define HEIGHT 360
 
 #define EMPTY 0u
 #define STONE 1u

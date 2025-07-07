@@ -1,0 +1,44 @@
+#include <metal_stdlib>
+#include <simd/simd.h>
+
+using namespace metal;
+
+constant uint3 gl_WorkGroupSize [[maybe_unused]] = uint3(16u, 16u, 1u);
+
+kernel void main0(texture2d<uint> readImage [[texture(0)]], texture2d<uint, access::write> blurImage [[texture(1)]], uint3 gl_GlobalInvocationID [[thread_position_in_grid]])
+{
+    int2 position = int2(int3(gl_GlobalInvocationID).xy);
+    bool _26 = position.x >= 480;
+    bool _35;
+    if (!_26)
+    {
+        _35 = position.y >= 360;
+    }
+    else
+    {
+        _35 = _26;
+    }
+    if (_35)
+    {
+        return;
+    }
+    uint particle = readImage.read(uint2(position)).x;
+    uint southParticle = readImage.read(uint2((position + int2(0, -1)))).x;
+    uint northParticle = readImage.read(uint2((position + int2(0, 1)))).x;
+    if (particle != 0u)
+    {
+        blurImage.write(uint4(particle), uint2(position));
+    }
+    else
+    {
+        if (northParticle == southParticle)
+        {
+            blurImage.write(uint4(northParticle), uint2(position));
+        }
+        else
+        {
+            blurImage.write(uint4(0u), uint2(position));
+        }
+    }
+}
+

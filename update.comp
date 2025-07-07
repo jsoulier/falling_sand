@@ -15,27 +15,33 @@ layout(set = 2, binding = 1) uniform uniformTime
     int time;
 };
 
-/* TODO: is 2x2 enough? should I do 3x3? */
-const ivec2 Offsets[4] = ivec2[](
+const ivec2 Offsets[9] = ivec2[](
     ivec2(0, 0),
     ivec2(0, 1),
+    ivec2(0, 2),
+    ivec2(1, 0),
     ivec2(1, 1),
-    ivec2(1, 0)
+    ivec2(1, 2),
+    ivec2(2, 0),
+    ivec2(2, 1),
+    ivec2(2, 2)
 );
 
 bool contains(ivec2 position)
 {
-    return position.x >= 0 && position.y >= 0 && position.x < WIDTH && position.y < HEIGHT;
+    return position.x >= 0 && position.y >= 0 &&
+        position.x < WIDTH && position.y < HEIGHT;
 }
 
 bool empty(ivec2 position)
 {
-    return contains(position) && imageLoad(readImage, position).x == EMPTY;
+    return contains(position) && imageLoad(readImage, position).x == EMPTY &&
+        imageLoad(writeImage, position).x == EMPTY;
 }
 
 void main()
 {
-    ivec2 position = ivec2(gl_GlobalInvocationID).xy * 2 + Offsets[offset % 4];
+    ivec2 position = ivec2(gl_GlobalInvocationID).xy * 3 + Offsets[offset % 9];
     if (!contains(position))
     {
         return;
@@ -45,11 +51,13 @@ void main()
     switch (particle)
     {
     case EMPTY:
-    case STONE:
         {
             /* noop */
             break;
         }
+    case STONE:
+        imageStore(writeImage, position, uvec4(STONE));
+        return;
     case SAND:
         {
             /* TODO: if water, can swap places */
@@ -76,7 +84,7 @@ void main()
                 }
             }
             imageStore(writeImage, position, uvec4(SAND));
-            break;
+            return;
         }
     case WATER:
         {
@@ -89,23 +97,38 @@ void main()
             {
                 neighborDirection = 1;
             }
-            ivec2 neighbors[5] = ivec2[](
-                position + ivec2(0, 1),
-                position + ivec2(-neighborDirection, 1),
-                position + ivec2(neighborDirection, 1),
-                position + ivec2(-neighborDirection, 0),
-                position + ivec2(neighborDirection, 0)
+            ivec2 neighborDirections[5] = ivec2[](
+                ivec2(0, 1),
+                ivec2(-neighborDirection, 1),
+                ivec2(neighborDirection, 1),
+                ivec2(-neighborDirection, 0),
+                ivec2(neighborDirection, 0)
             );
+            const int travelDistance = 5;
             for (int i = 0; i < 5; i++)
             {
-                if (empty(neighbors[i]))
+                int maxDistance = 0;
+                for (int j = 1; j <= travelDistance; j++)
                 {
-                    imageStore(writeImage, neighbors[i], uvec4(WATER));
+                    ivec2 neighbor = position + neighborDirections[i] * j;
+                    if (empty(neighbor))
+                    {
+                        maxDistance = j;
+                    }
+                    else
+                    {
+                        break;
+                    }
+                }
+                if (maxDistance > 0)
+                {
+                    ivec2 neighbor = position + neighborDirections[i] * maxDistance;
+                    imageStore(writeImage, neighbor, uvec4(WATER));
                     return;
                 }
             }
             imageStore(writeImage, position, uvec4(WATER));
-            break;
+            return;
         }
     }
 }
