@@ -36,6 +36,10 @@ static volatile int speed = 16;
 static volatile int readFrame = 0;
 static volatile int writeFrame = 1;
 static uint32_t particle = SAND;
+static float letterboxX;
+static float letterboxY;
+static float letterboxW = 0.0f;
+static float letterboxH = 0.0f;
 static int radius = 3;
 static bool imguiFocused;
 
@@ -48,7 +52,7 @@ static bool Init()
         SDL_Log("Failed to initialize SDL: %s", SDL_GetError());
         return false;
     }
-    window = SDL_CreateWindow("Falling Sand", WIDTH * 3, HEIGHT * 3, SDL_WINDOW_RESIZABLE);
+    window = SDL_CreateWindow("Falling Sand", WIDTH, HEIGHT, SDL_WINDOW_RESIZABLE);
     if (!window)
     {
         SDL_Log("Failed to create window: %s", SDL_GetError());
@@ -221,6 +225,39 @@ static void RenderImGui(SDL_GPUCommandBuffer* commandBuffer)
     ImGui_ImplSDLGPU3_PrepareDrawData(ImGui::GetDrawData(), commandBuffer);
 }
 
+static void LetterboxBlit(SDL_GPUCommandBuffer* commandBuffer, SDL_GPUTexture* swapchainTexture)
+{
+    SDL_GPUBlitInfo info{};
+    const float renderRatio = static_cast<float>(WIDTH) / HEIGHT;
+    const float swapchainRatio = static_cast<float>(width) / height;
+    float scale = 0.0f;
+    if (renderRatio > swapchainRatio)
+    {
+        scale = static_cast<float>(width) / WIDTH;
+        letterboxW = width;
+        letterboxH = HEIGHT * scale;
+        letterboxY = (height - letterboxH) / 2.0f;
+    }
+    else
+    {
+        scale = static_cast<float>(height) / HEIGHT;
+        letterboxH = height;
+        letterboxW = WIDTH * scale;
+        letterboxX = (width - letterboxW) / 2.0f;
+    }
+    info.load_op = SDL_GPU_LOADOP_CLEAR;
+    info.source.texture = renderTexture;
+    info.source.w = WIDTH;
+    info.source.h = HEIGHT;
+    info.destination.texture = swapchainTexture;
+    info.destination.x = letterboxX;
+    info.destination.y = letterboxY;
+    info.destination.w = letterboxW;
+    info.destination.h = letterboxH;
+    info.filter = SDL_GPU_FILTER_NEAREST;
+    SDL_BlitGPUTexture(commandBuffer, &info);
+}
+
 static void Render()
 {
     SDL_WaitForGPUSwapchain(device, window);
@@ -279,18 +316,7 @@ static void Render()
         SDL_DrawGPUPrimitives(renderPass, 4, 1, 0, 0);
         SDL_EndGPURenderPass(renderPass);
     }
-    {
-        SDL_GPUBlitInfo info{};
-        info.load_op = SDL_GPU_LOADOP_DONT_CARE;
-        info.source.texture = renderTexture;
-        info.source.w = WIDTH;
-        info.source.h = HEIGHT;
-        info.destination.texture = swapchainTexture;
-        info.destination.w = width;
-        info.destination.h = height;
-        info.filter = SDL_GPU_FILTER_NEAREST;
-        SDL_BlitGPUTexture(commandBuffer, &info);
-    }
+    LetterboxBlit(commandBuffer, swapchainTexture);
     {
         SDL_GPUColorTargetInfo info{};
         info.texture = swapchainTexture;
@@ -318,14 +344,15 @@ static void Upload(float x1, float y1, float x2, float y2)
     {
         distance = 1.0f;
     }
-    float scaleX = static_cast<float>(WIDTH) / width;
-    float scaleY = static_cast<float>(HEIGHT) / height;
+    float scale = static_cast<float>(letterboxW) / WIDTH;
     static constexpr float Step = 1.0f;
     for (float i = 0.0f; i < distance; i += Step)
     {
         float t = i / distance;
-        float x = (x1 + t * dx) * scaleX;
-        float y = (y1 + t * dy) * scaleY;
+        float screenX = x1 + t * dx;
+        float screenY = y1 + t * dy;
+        float x = (screenX - letterboxX) / scale;
+        float y = (screenY - letterboxY) / scale;
         uint32_t position = 0;
         position |= static_cast<uint32_t>(x) << 0;
         position |= static_cast<uint32_t>(y) << 16;

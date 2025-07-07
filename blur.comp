@@ -1,6 +1,6 @@
 #version 450
     
-/* NOTE: not really a blur */
+/* NOTE: not a blur (but don't know what to call it) */
 
 #include "config.hpp"
 
@@ -16,8 +16,10 @@ void main()
         return;
     }
     uint particle = imageLoad(readImage, position).x;
-    uint southParticle = imageLoad(readImage, position + ivec2(0, -1)).x;
     uint northParticle = imageLoad(readImage, position + ivec2(0, 1)).x;
+    uint southParticle = imageLoad(readImage, position + ivec2(0, -1)).x;
+    uint eastParticle = imageLoad(readImage, position + ivec2(1, 0)).x;
+    uint westParticle = imageLoad(readImage, position + ivec2(-1, 0)).x;
     if (particle != EMPTY)
     {
         imageStore(blurImage, position, uvec4(particle));
@@ -25,6 +27,10 @@ void main()
     else if (northParticle == southParticle)
     {
         imageStore(blurImage, position, uvec4(northParticle));
+    }
+    else if (eastParticle == westParticle)
+    {
+        imageStore(blurImage, position, uvec4(eastParticle));
     }
     else
     {

@@ -46,7 +46,7 @@ kernel void main0(constant uniformSize& _19 [[buffer(0)]], constant uniformParti
             }
             int x = cx + dx;
             int y = cy + dy;
-            if ((((x >= 0) && (y >= 0)) && (x < 480)) && (y < 360))
+            if ((((x >= 0) && (y >= 0)) && (x < 960)) && (y < 720))
             {
                 writeImage.write(uint4(_128.particle), uint2(int2(x, y)));
             }

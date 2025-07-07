@@ -8,11 +8,11 @@ constant uint3 gl_WorkGroupSize [[maybe_unused]] = uint3(16u, 16u, 1u);
 kernel void main0(texture2d<uint, access::write> writeImage [[texture(0)]], uint3 gl_GlobalInvocationID [[thread_position_in_grid]])
 {
     int2 position = int2(int3(gl_GlobalInvocationID).xy);
-    bool _26 = position.x >= 480;
+    bool _26 = position.x >= 960;
     bool _35;
     if (!_26)
     {
-        _35 = position.y >= 360;
+        _35 = position.y >= 720;
     }
     else
     {

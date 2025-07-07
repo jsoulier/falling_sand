@@ -77,7 +77,7 @@ bool contains(thread const int2& position)
     bool _139;
     if (_132)
     {
-        _139 = position.x < 480;
+        _139 = position.x < 960;
     }
     else
     {
@@ -86,7 +86,7 @@ bool contains(thread const int2& position)
     bool _146;
     if (_139)
     {
-        _146 = position.y < 360;
+        _146 = position.y < 720;
     }
     else
     {
