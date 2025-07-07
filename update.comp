@@ -15,6 +15,7 @@ layout(set = 2, binding = 1) uniform uniformTime
     int time;
 };
 
+/* TODO: is 2x2 enough? should I do 3x3? */
 const ivec2 Offsets[4] = ivec2[](
     ivec2(0, 0),
     ivec2(0, 1),
@@ -40,6 +41,7 @@ void main()
         return;
     }
     uint particle = imageLoad(readImage, position).x;
+    /* TODO: refactor using properties */
     switch (particle)
     {
     case EMPTY:
@@ -50,6 +52,7 @@ void main()
         }
     case SAND:
         {
+            /* TODO: if water, can swap places */
             int neighborDirection;
             if (random(ivec3(position, time)) > 0.5f)
             {
@@ -68,16 +71,40 @@ void main()
             {
                 if (empty(neighbors[i]))
                 {
-                    imageStore(writeImage, neighbors[i], uvec4(particle));
+                    imageStore(writeImage, neighbors[i], uvec4(SAND));
                     return;
                 }
             }
-            imageStore(writeImage, position, uvec4(particle));
+            imageStore(writeImage, position, uvec4(SAND));
             break;
         }
     case WATER:
         {
-            /* TODO: */
+            int neighborDirection;
+            if (random(ivec3(position, time)) > 0.5f)
+            {
+                neighborDirection = -1;
+            }
+            else
+            {
+                neighborDirection = 1;
+            }
+            ivec2 neighbors[5] = ivec2[](
+                position + ivec2(0, 1),
+                position + ivec2(-neighborDirection, 1),
+                position + ivec2(neighborDirection, 1),
+                position + ivec2(-neighborDirection, 0),
+                position + ivec2(neighborDirection, 0)
+            );
+            for (int i = 0; i < 5; i++)
+            {
+                if (empty(neighbors[i]))
+                {
+                    imageStore(writeImage, neighbors[i], uvec4(WATER));
+                    return;
+                }
+            }
+            imageStore(writeImage, position, uvec4(WATER));
             break;
         }
     }

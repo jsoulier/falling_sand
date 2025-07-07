@@ -107,12 +107,12 @@ static inline __attribute__((always_inline))
 uint hash(thread const uint3& v)
 {
     uint param = v.y;
-    uint _81 = hash(param);
+    uint _96 = hash(param);
     uint param_1 = v.z;
-    uint _87 = hash(param_1);
-    uint param_2 = (v.x ^ _81) ^ _87;
-    uint _90 = hash(param_2);
-    return _90;
+    uint _102 = hash(param_1);
+    uint param_2 = (v.x ^ _96) ^ _102;
+    uint _105 = hash(param_2);
+    return _105;
 }
 
 static inline __attribute__((always_inline))
@@ -192,15 +192,37 @@ kernel void main0(constant uniformOffset& _187 [[buffer(0)]], constant uniformTi
                 int2 param_2 = neighbors[i];
                 if (empty(param_2, readImage))
                 {
-                    writeImage.write(uint4(particle), uint2(neighbors[i]));
+                    writeImage.write(uint4(2u), uint2(neighbors[i]));
                     return;
                 }
             }
-            writeImage.write(uint4(particle), uint2(position));
+            writeImage.write(uint4(2u), uint2(position));
             break;
         }
         case 3u:
         {
+            int3 param_3 = int3(position, _218.time);
+            int neighborDirection_1;
+            if (random(param_3) > 0.5)
+            {
+                neighborDirection_1 = -1;
+            }
+            else
+            {
+                neighborDirection_1 = 1;
+            }
+            spvUnsafeArray<int2, 5> _314 = spvUnsafeArray<int2, 5>({ position + int2(0, 1), position + int2(-neighborDirection_1, 1), position + int2(neighborDirection_1, 1), position + int2(-neighborDirection_1, 0), position + int2(neighborDirection_1, 0) });
+            spvUnsafeArray<int2, 5> neighbors_1 = _314;
+            for (int i_1 = 0; i_1 < 5; i_1++)
+            {
+                int2 param_4 = neighbors_1[i_1];
+                if (empty(param_4, readImage))
+                {
+                    writeImage.write(uint4(3u), uint2(neighbors_1[i_1]));
+                    return;
+                }
+            }
+            writeImage.write(uint4(3u), uint2(position));
             break;
         }
     }

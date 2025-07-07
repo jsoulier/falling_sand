@@ -9,7 +9,7 @@ const vec3 Colors[4] = vec3[](
     vec3(0.0f, 0.0f, 0.0f), /* empty */
     vec3(0.5f, 0.5f, 0.5f), /* stone */
     vec3(1.0f, 1.0f, 0.0f), /* sand */
-    vec3(0.5f, 0.5f, 1.0f)  /* water */
+    vec3(0.0f, 0.5f, 1.0f)  /* water */
 );
 
 void main()
