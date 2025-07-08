@@ -1,24 +1,29 @@
 #version 450
 
 #include "config.hpp"
+#include "random.glsl"
 
 layout(local_size_x = UPLOAD_THREADS) in;
 layout(set = 0, binding = 0) buffer readonly bufferParticles
 {
     uint particles[];
 };
-layout(set = 1, binding = 0, r8ui) uniform uimage2D writeImage;
+layout(set = 1, binding = 0, r32ui) uniform uimage2D writeImage;
 layout(set = 2, binding = 0) uniform uniformSize
 {
     uint size;
 };
-layout(set = 2, binding = 1) uniform uniformParticle
+layout(set = 2, binding = 1) uniform uniformData
 {
-    uint particle;
+    uint data;
 };
 layout(set = 2, binding = 2) uniform uniformRadius
 {
     int radius;
+};
+layout(set = 2, binding = 3) uniform uniformTime
+{
+    uint time;
 };
 
 void main()
@@ -28,6 +33,10 @@ void main()
     {
         return;
     }
+    int red = int((data >> 0) & 0xFFu);
+    int green = int((data >> 8) & 0xFFu);
+    int blue = int((data >> 16) & 0xFFu);
+    uint type = (data >> 24) & 0xFFu;
     int cx = int((particles[id] >> 0) & 0xFFFF);
     int cy = int((particles[id] >> 16) & 0xFFFF);
     for (int dx = -radius; dx <= radius; dx++)
@@ -39,9 +48,39 @@ void main()
         }
         int x = cx + dx;
         int y = cy + dy;
-        if (x >= 0 && y >= 0 && x < WIDTH && y < HEIGHT)
+        if (x < 0 || y < 0 || x >= WIDTH || y >= HEIGHT)
         {
-            imageStore(writeImage, ivec2(x, y), uvec4(particle));
+            continue;
         }
+        ivec2 position = ivec2(x, y);
+        int r = red;
+        int g = green;
+        int b = blue;
+        if (type == EMPTY)
+        {
+            r = 0;
+            g = 0;
+            b = 0;
+        }
+        else if (type == SAND)
+        {
+            const float Scale = 40.0f;
+            r += int(random(ivec4(position, time, 0) - 0.5f) * Scale);
+            g += int(random(ivec4(position, time, 1) - 0.5f) * Scale);
+            b += int(random(ivec4(position, time, 2) - 0.5f) * Scale);
+        }
+        else if (type == STONE)
+        {
+            int value = int(random(ivec4(position, time, 0) - 0.5f) * 10);
+            r = 128 + value;
+            g = 128 + value;
+            b = 128 + value;
+        }
+        uint particle = 0;
+        particle |= clamp(r, 0u, 255u) << 0;
+        particle |= clamp(g, 0u, 255u) << 8;
+        particle |= clamp(b, 0u, 255u) << 16;
+        particle |= type << 24;
+        imageStore(writeImage, position, uvec4(particle));
     }
 }

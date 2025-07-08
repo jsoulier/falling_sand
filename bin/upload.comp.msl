@@ -1,3 +1,5 @@
+#pragma clang diagnostic ignored "-Wmissing-prototypes"
+
 #include <metal_stdlib>
 #include <simd/simd.h>
 
@@ -6,6 +8,11 @@ using namespace metal;
 struct uniformSize
 {
     uint size;
+};
+
+struct uniformData
+{
+    uint data;
 };
 
 struct bufferParticles
@@ -18,38 +25,124 @@ struct uniformRadius
     int radius;
 };
 
-struct uniformParticle
+struct uniformTime
 {
-    uint particle;
+    uint time;
 };
 
 constant uint3 gl_WorkGroupSize [[maybe_unused]] = uint3(128u, 1u, 1u);
 
-kernel void main0(constant uniformSize& _19 [[buffer(0)]], constant uniformParticle& _128 [[buffer(1)]], constant uniformRadius& _54 [[buffer(2)]], const device bufferParticles& _35 [[buffer(3)]], texture2d<uint, access::write> writeImage [[texture(0)]], uint3 gl_GlobalInvocationID [[thread_position_in_grid]])
+static inline __attribute__((always_inline))
+uint hash(thread uint& x)
+{
+    x += (x << 10u);
+    x ^= (x >> 6u);
+    x += (x << 3u);
+    x ^= (x >> 11u);
+    x += (x << 15u);
+    return x;
+}
+
+static inline __attribute__((always_inline))
+uint hash(thread const uint4& v)
+{
+    uint param = v.y;
+    uint _79 = hash(param);
+    uint param_1 = v.z;
+    uint _85 = hash(param_1);
+    uint param_2 = v.w;
+    uint _90 = hash(param_2);
+    uint param_3 = ((v.x ^ _79) ^ _85) ^ _90;
+    uint _93 = hash(param_3);
+    return _93;
+}
+
+static inline __attribute__((always_inline))
+float floatConstruct(thread uint& m)
+{
+    m &= 8388607u;
+    m |= 1065353216u;
+    float f = as_type<float>(m);
+    return f - 1.0;
+}
+
+static inline __attribute__((always_inline))
+float random(thread const float4& v)
+{
+    uint4 param = as_type<uint4>(v);
+    uint param_1 = hash(param);
+    float _101 = floatConstruct(param_1);
+    return _101;
+}
+
+kernel void main0(constant uniformSize& _114 [[buffer(0)]], constant uniformData& _129 [[buffer(1)]], constant uniformRadius& _178 [[buffer(2)]], constant uniformTime& _266 [[buffer(3)]], const device bufferParticles& _160 [[buffer(4)]], texture2d<uint, access::write> writeImage [[texture(0)]], uint3 gl_GlobalInvocationID [[thread_position_in_grid]])
 {
     uint id = gl_GlobalInvocationID.x;
-    if (id >= _19.size)
+    if (id >= _114.size)
     {
         return;
     }
-    int cx = int((_35.particles[id] >> uint(0)) & 65535u);
-    int cy = int((_35.particles[id] >> uint(16)) & 65535u);
-    int _58 = -_54.radius;
-    for (int dx = _58; dx <= _54.radius; dx++)
+    int red = int((_129.data >> uint(0)) & 255u);
+    int green = int((_129.data >> uint(8)) & 255u);
+    int blue = int((_129.data >> uint(16)) & 255u);
+    uint type = (_129.data >> uint(24)) & 255u;
+    int cx = int((_160.particles[id] >> uint(0)) & 65535u);
+    int cy = int((_160.particles[id] >> uint(16)) & 65535u);
+    int _182 = -_178.radius;
+    for (int dx = _182; dx <= _178.radius; dx++)
     {
-        int _71 = -_54.radius;
-        for (int dy = _71; dy <= _54.radius; dy++)
+        int _195 = -_178.radius;
+        for (int dy = _195; dy <= _178.radius; dy++)
         {
-            if (length(float2(int2(dx, dy))) >= float(_54.radius))
+            if (length(float2(int2(dx, dy))) >= float(_178.radius))
             {
                 continue;
             }
             int x = cx + dx;
             int y = cy + dy;
-            if ((((x >= 0) && (y >= 0)) && (x < 960)) && (y < 720))
+            if ((((x < 0) || (y < 0)) || (x >= 480)) || (y >= 360))
             {
-                writeImage.write(uint4(_128.particle), uint2(int2(x, y)));
+                continue;
             }
+            int2 position = int2(x, y);
+            int r = red;
+            int g = green;
+            int b = blue;
+            if (type == 0u)
+            {
+                r = 0;
+                g = 0;
+                b = 0;
+            }
+            else
+            {
+                if (type == 1u)
+                {
+                    float4 param = float4(int4(position, int(_266.time), 0)) - float4(0.5);
+                    r += int(random(param) * 40.0);
+                    float4 param_1 = float4(int4(position, int(_266.time), 1)) - float4(0.5);
+                    g += int(random(param_1) * 40.0);
+                    float4 param_2 = float4(int4(position, int(_266.time), 2)) - float4(0.5);
+                    b += int(random(param_2) * 40.0);
+                }
+                else
+                {
+                    if (type == 2u)
+                    {
+                        float4 param_3 = float4(int4(position, int(_266.time), 0)) - float4(0.5);
+                        int value = int(random(param_3) * 10.0);
+                        r = 128 + value;
+                        g = 128 + value;
+                        b = 128 + value;
+                    }
+                }
+            }
+            uint particle = 0u;
+            particle |= (clamp(uint(r), 0u, 255u) << uint(0));
+            particle |= (clamp(uint(g), 0u, 255u) << uint(8));
+            particle |= (clamp(uint(b), 0u, 255u) << uint(16));
+            particle |= (type << uint(24));
+            writeImage.write(uint4(particle), uint2(position));
         }
     }
 }

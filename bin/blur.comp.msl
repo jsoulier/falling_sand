@@ -1,18 +1,61 @@
+#pragma clang diagnostic ignored "-Wmissing-prototypes"
+#pragma clang diagnostic ignored "-Wmissing-braces"
+
 #include <metal_stdlib>
 #include <simd/simd.h>
 
 using namespace metal;
 
+template<typename T, size_t Num>
+struct spvUnsafeArray
+{
+    T elements[Num ? Num : 1];
+    
+    thread T& operator [] (size_t pos) thread
+    {
+        return elements[pos];
+    }
+    constexpr const thread T& operator [] (size_t pos) const thread
+    {
+        return elements[pos];
+    }
+    
+    device T& operator [] (size_t pos) device
+    {
+        return elements[pos];
+    }
+    constexpr const device T& operator [] (size_t pos) const device
+    {
+        return elements[pos];
+    }
+    
+    constexpr const constant T& operator [] (size_t pos) const constant
+    {
+        return elements[pos];
+    }
+    
+    threadgroup T& operator [] (size_t pos) threadgroup
+    {
+        return elements[pos];
+    }
+    constexpr const threadgroup T& operator [] (size_t pos) const threadgroup
+    {
+        return elements[pos];
+    }
+};
+
 constant uint3 gl_WorkGroupSize [[maybe_unused]] = uint3(16u, 16u, 1u);
+
+constant spvUnsafeArray<int2, 2> _83 = spvUnsafeArray<int2, 2>({ int2(0, -1), int2(0, 1) });
 
 kernel void main0(texture2d<uint> readImage [[texture(0)]], texture2d<uint, access::write> blurImage [[texture(1)]], uint3 gl_GlobalInvocationID [[thread_position_in_grid]])
 {
     int2 position = int2(int3(gl_GlobalInvocationID).xy);
-    bool _26 = position.x >= 960;
+    bool _26 = position.x >= 480;
     bool _35;
     if (!_26)
     {
-        _35 = position.y >= 720;
+        _35 = position.y >= 360;
     }
     else
     {
@@ -23,31 +66,23 @@ kernel void main0(texture2d<uint> readImage [[texture(0)]], texture2d<uint, acce
         return;
     }
     uint particle = readImage.read(uint2(position)).x;
-    uint northParticle = readImage.read(uint2((position + int2(0, 1)))).x;
-    uint southParticle = readImage.read(uint2((position + int2(0, -1)))).x;
-    uint eastParticle = readImage.read(uint2((position + int2(1, 0)))).x;
-    uint westParticle = readImage.read(uint2((position + int2(-1, 0)))).x;
-    if (particle != 0u)
+    uint type = (particle >> uint(24)) & 255u;
+    if (type > 0u)
     {
         blurImage.write(uint4(particle), uint2(position));
+        return;
     }
-    else
+    for (int i = 0; i < 2; i++)
     {
-        if (northParticle == southParticle)
+        int2 neighborPosition = position + _83[i];
+        uint neighborParticle = readImage.read(uint2(neighborPosition)).x;
+        uint neighborType = (neighborParticle >> uint(24)) & 255u;
+        if (neighborType > 0u)
         {
-            blurImage.write(uint4(northParticle), uint2(position));
-        }
-        else
-        {
-            if (eastParticle == westParticle)
-            {
-                blurImage.write(uint4(eastParticle), uint2(position));
-            }
-            else
-            {
-                blurImage.write(uint4(0u), uint2(position));
-            }
+            blurImage.write(uint4(neighborParticle), uint2(position));
+            return;
         }
     }
+    blurImage.write(uint4(0u), uint2(position));
 }
 

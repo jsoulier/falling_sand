@@ -83,7 +83,7 @@ add_shader(clear.comp config.hpp)
 add_shader(fullscreen.vert)
 add_shader(render.frag config.hpp)
 add_shader(update.comp config.hpp random.glsl)
-add_shader(upload.comp config.hpp)
+add_shader(upload.comp config.hpp random.glsl)
 
 configure_file(LICENSE.txt ${BINARY_DIR} COPYONLY)
 configure_file(README.md ${BINARY_DIR} COPYONLY)

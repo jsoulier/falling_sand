@@ -1,12 +1,14 @@
 #version 450
     
-/* NOTE: not a blur (but don't know what to call it) */
+/* NOTE: not a blur */
 
 #include "config.hpp"
 
 layout(local_size_x = UPDATE_THREADS, local_size_y = UPDATE_THREADS) in;
-layout(set = 0, binding = 0, r8ui) uniform readonly uimage2D readImage;
-layout(set = 1, binding = 0, r8ui) uniform uimage2D blurImage;
+layout(set = 0, binding = 0, r32ui) uniform readonly uimage2D readImage;
+layout(set = 1, binding = 0, r32ui) uniform uimage2D blurImage;
+
+const ivec2 Neighbors[2] = ivec2[](ivec2(0, -1), ivec2(0, 1));
 
 void main()
 {
@@ -16,24 +18,22 @@ void main()
         return;
     }
     uint particle = imageLoad(readImage, position).x;
-    uint northParticle = imageLoad(readImage, position + ivec2(0, 1)).x;
-    uint southParticle = imageLoad(readImage, position + ivec2(0, -1)).x;
-    uint eastParticle = imageLoad(readImage, position + ivec2(1, 0)).x;
-    uint westParticle = imageLoad(readImage, position + ivec2(-1, 0)).x;
-    if (particle != EMPTY)
+    uint type = (particle >> 24) & 0xFFu;
+    if (type > 0)
     {
         imageStore(blurImage, position, uvec4(particle));
+        return;
     }
-    else if (northParticle == southParticle)
+    for (int i = 0; i < 2; i++)
     {
-        imageStore(blurImage, position, uvec4(northParticle));
+        ivec2 neighborPosition = position + Neighbors[i];
+        uint neighborParticle = imageLoad(readImage, neighborPosition).x;
+        uint neighborType = (neighborParticle >> 24) & 0xFFu;
+        if (neighborType > 0)
+        {
+            imageStore(blurImage, position, uvec4(neighborParticle));
+            return;
+        }
     }
-    else if (eastParticle == westParticle)
-    {
-        imageStore(blurImage, position, uvec4(eastParticle));
-    }
-    else
-    {
-        imageStore(blurImage, position, uvec4(EMPTY));
-    }
+    imageStore(blurImage, position, uvec4(EMPTY));
 }

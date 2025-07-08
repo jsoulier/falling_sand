@@ -59,40 +59,40 @@ struct uniformTime
 
 constant uint3 gl_WorkGroupSize [[maybe_unused]] = uint3(16u, 16u, 1u);
 
-constant spvUnsafeArray<int2, 9> _199 = spvUnsafeArray<int2, 9>({ int2(0), int2(0, 1), int2(0, 2), int2(1, 0), int2(1), int2(1, 2), int2(2, 0), int2(2, 1), int2(2) });
+constant spvUnsafeArray<int2, 9> _170 = spvUnsafeArray<int2, 9>({ int2(0), int2(0, 1), int2(0, 2), int2(1, 0), int2(1), int2(1, 2), int2(2, 0), int2(2, 1), int2(2) });
 
 static inline __attribute__((always_inline))
 bool contains(thread const int2& position)
 {
-    bool _126 = position.x >= 0;
-    bool _132;
-    if (_126)
+    bool _123 = position.x >= 0;
+    bool _130;
+    if (_123)
     {
-        _132 = position.y >= 0;
+        _130 = position.x < 480;
     }
     else
     {
-        _132 = _126;
+        _130 = _123;
     }
-    bool _139;
-    if (_132)
+    bool _137;
+    if (_130)
     {
-        _139 = position.x < 960;
+        _137 = position.y < 360;
     }
     else
     {
-        _139 = _132;
+        _137 = _130;
     }
-    bool _146;
-    if (_139)
+    bool _143;
+    if (_137)
     {
-        _146 = position.y < 720;
+        _143 = position.y >= 0;
     }
     else
     {
-        _146 = _139;
+        _143 = _137;
     }
-    return _146;
+    return _143;
 }
 
 static inline __attribute__((always_inline))
@@ -110,12 +110,12 @@ static inline __attribute__((always_inline))
 uint hash(thread const uint3& v)
 {
     uint param = v.y;
-    uint _96 = hash(param);
+    uint _93 = hash(param);
     uint param_1 = v.z;
-    uint _102 = hash(param_1);
-    uint param_2 = (v.x ^ _96) ^ _102;
-    uint _105 = hash(param_2);
-    return _105;
+    uint _99 = hash(param_1);
+    uint param_2 = (v.x ^ _93) ^ _99;
+    uint _102 = hash(param_2);
+    return _102;
 }
 
 static inline __attribute__((always_inline))
@@ -132,8 +132,8 @@ float random(thread const float3& v)
 {
     uint3 param = as_type<uint3>(v);
     uint param_1 = hash(param);
-    float _113 = floatConstruct(param_1);
-    return _113;
+    float _110 = floatConstruct(param_1);
+    return _110;
 }
 
 static inline __attribute__((always_inline))
@@ -143,56 +143,26 @@ float random(thread const int3& v)
     return random(param);
 }
 
-static inline __attribute__((always_inline))
-bool empty(thread const int2& position, texture2d<uint> readImage, texture2d<uint, access::read_write> writeImage)
+kernel void main0(constant uniformOffset& _173 [[buffer(0)]], constant uniformTime& _219 [[buffer(1)]], texture2d<uint> readImage [[texture(0)]], texture2d<uint, access::read_write> writeImage [[texture(1)]], uint3 gl_GlobalInvocationID [[thread_position_in_grid]])
 {
-    int2 param = position;
-    bool _151 = contains(param);
-    bool _163;
-    if (_151)
-    {
-        _163 = readImage.read(uint2(position)).x == 0u;
-    }
-    else
-    {
-        _163 = _151;
-    }
-    bool _172;
-    if (_163)
-    {
-        spvImageFence(writeImage);
-        _172 = writeImage.read(uint2(position)).x == 0u;
-    }
-    else
-    {
-        _172 = _163;
-    }
-    return _172;
-}
-
-kernel void main0(constant uniformOffset& _202 [[buffer(0)]], constant uniformTime& _238 [[buffer(1)]], texture2d<uint> readImage [[texture(0)]], texture2d<uint, access::read_write> writeImage [[texture(1)]], uint3 gl_GlobalInvocationID [[thread_position_in_grid]])
-{
-    int2 position = (int2(int3(gl_GlobalInvocationID).xy) * int2(3)) + _199[_202.offset % 9u];
+    int2 position = (int2(int3(gl_GlobalInvocationID).xy) * int2(3)) + _170[_173.offset % 9u];
     int2 param = position;
     if (!contains(param))
     {
         return;
     }
     uint particle = readImage.read(uint2(position)).x;
-    switch (particle)
+    uint type = (particle >> uint(24)) & 255u;
+    switch (type)
     {
-        case 0u:
+        case 2u:
         {
-            break;
+            writeImage.write(uint4(particle), uint2(position));
+            return;
         }
         case 1u:
         {
-            writeImage.write(uint4(1u), uint2(position));
-            return;
-        }
-        case 2u:
-        {
-            int3 param_1 = int3(position, _238.time);
+            int3 param_1 = int3(position, _219.time);
             int neighborDirection;
             if (random(param_1) > 0.5)
             {
@@ -202,58 +172,29 @@ kernel void main0(constant uniformOffset& _202 [[buffer(0)]], constant uniformTi
             {
                 neighborDirection = 1;
             }
-            spvUnsafeArray<int2, 3> _268 = spvUnsafeArray<int2, 3>({ position + int2(0, 1), position + int2(-neighborDirection, 1), position + int2(neighborDirection, 1) });
-            spvUnsafeArray<int2, 3> neighbors = _268;
+            spvUnsafeArray<int2, 3> _249 = spvUnsafeArray<int2, 3>({ position + int2(0, 1), position + int2(-neighborDirection, 1), position + int2(neighborDirection, 1) });
+            spvUnsafeArray<int2, 3> neighbors = _249;
             for (int i = 0; i < 3; i++)
             {
                 int2 param_2 = neighbors[i];
-                if (empty(param_2, readImage, writeImage))
+                if (!contains(param_2))
                 {
-                    writeImage.write(uint4(2u), uint2(neighbors[i]));
+                    continue;
+                }
+                uint readType = (readImage.read(uint2(neighbors[i])).x >> uint(24)) & 255u;
+                spvImageFence(writeImage);
+                uint writeType = (writeImage.read(uint2(neighbors[i])).x >> uint(24)) & 255u;
+                if ((readType == 0u) && (writeType == 0u))
+                {
+                    writeImage.write(uint4(particle), uint2(neighbors[i]));
                     return;
                 }
             }
-            writeImage.write(uint4(2u), uint2(position));
+            writeImage.write(uint4(particle), uint2(position));
             return;
         }
-        case 3u:
+        case 0u:
         {
-            int3 param_3 = int3(position, _238.time);
-            int neighborDirection_1;
-            if (random(param_3) > 0.5)
-            {
-                neighborDirection_1 = -1;
-            }
-            else
-            {
-                neighborDirection_1 = 1;
-            }
-            spvUnsafeArray<int2, 5> _322 = spvUnsafeArray<int2, 5>({ int2(0, 1), int2(-neighborDirection_1, 1), int2(neighborDirection_1, 1), int2(-neighborDirection_1, 0), int2(neighborDirection_1, 0) });
-            spvUnsafeArray<int2, 5> neighborDirections = _322;
-            for (int i_1 = 0; i_1 < 5; i_1++)
-            {
-                int maxDistance = 0;
-                for (int j = 1; j <= 5; j++)
-                {
-                    int2 neighbor = position + (neighborDirections[i_1] * int2(j));
-                    int2 param_4 = neighbor;
-                    if (empty(param_4, readImage, writeImage))
-                    {
-                        maxDistance = j;
-                    }
-                    else
-                    {
-                        break;
-                    }
-                }
-                if (maxDistance > 0)
-                {
-                    int2 neighbor_1 = position + (neighborDirections[i_1] * int2(maxDistance));
-                    writeImage.write(uint4(3u), uint2(neighbor_1));
-                    return;
-                }
-            }
-            writeImage.write(uint4(3u), uint2(position));
             return;
         }
     }

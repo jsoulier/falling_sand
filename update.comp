@@ -4,8 +4,8 @@
 #include "random.glsl"
 
 layout(local_size_x = UPDATE_THREADS, local_size_y = UPDATE_THREADS) in;
-layout(set = 0, binding = 0, r8ui) uniform readonly uimage2D readImage;
-layout(set = 1, binding = 0, r8ui) uniform uimage2D writeImage;
+layout(set = 0, binding = 0, r32ui) uniform readonly uimage2D readImage;
+layout(set = 1, binding = 0, r32ui) uniform uimage2D writeImage;
 layout(set = 2, binding = 0) uniform uniformOffset
 {
     uint offset;
@@ -29,14 +29,11 @@ const ivec2 Offsets[9] = ivec2[](
 
 bool contains(ivec2 position)
 {
-    return position.x >= 0 && position.y >= 0 &&
-        position.x < WIDTH && position.y < HEIGHT;
-}
-
-bool empty(ivec2 position)
-{
-    return contains(position) && imageLoad(readImage, position).x == EMPTY &&
-        imageLoad(writeImage, position).x == EMPTY;
+    return
+        position.x >= 0 &&
+        position.x < WIDTH &&
+        position.y < HEIGHT &&
+        position.y >= 0;
 }
 
 void main()
@@ -47,20 +44,14 @@ void main()
         return;
     }
     uint particle = imageLoad(readImage, position).x;
-    /* TODO: refactor using properties */
-    switch (particle)
+    uint type = (particle >> 24) & 0xFFu;
+    switch (type)
     {
-    case EMPTY:
-        {
-            /* noop */
-            break;
-        }
     case STONE:
-        imageStore(writeImage, position, uvec4(STONE));
+        imageStore(writeImage, position, uvec4(particle));
         return;
     case SAND:
         {
-            /* TODO: if water, can swap places */
             int neighborDirection;
             if (random(ivec3(position, time)) > 0.5f)
             {
@@ -77,58 +68,23 @@ void main()
             );
             for (int i = 0; i < 3; i++)
             {
-                if (empty(neighbors[i]))
+                if (!contains(neighbors[i]))
                 {
-                    imageStore(writeImage, neighbors[i], uvec4(SAND));
+                    continue;
+                }
+                uint readType = (imageLoad(readImage, neighbors[i]).x >> 24) & 0xFFu;
+                uint writeType = (imageLoad(writeImage, neighbors[i]).x >> 24) & 0xFFu;
+                if (readType == EMPTY && writeType == EMPTY)
+                {
+                    imageStore(writeImage, neighbors[i], uvec4(particle));
                     return;
                 }
             }
-            imageStore(writeImage, position, uvec4(SAND));
+            imageStore(writeImage, position, uvec4(particle));
             return;
         }
-    case WATER:
-        {
-            int neighborDirection;
-            if (random(ivec3(position, time)) > 0.5f)
-            {
-                neighborDirection = -1;
-            }
-            else
-            {
-                neighborDirection = 1;
-            }
-            ivec2 neighborDirections[5] = ivec2[](
-                ivec2(0, 1),
-                ivec2(-neighborDirection, 1),
-                ivec2(neighborDirection, 1),
-                ivec2(-neighborDirection, 0),
-                ivec2(neighborDirection, 0)
-            );
-            const int travelDistance = 5;
-            for (int i = 0; i < 5; i++)
-            {
-                int maxDistance = 0;
-                for (int j = 1; j <= travelDistance; j++)
-                {
-                    ivec2 neighbor = position + neighborDirections[i] * j;
-                    if (empty(neighbor))
-                    {
-                        maxDistance = j;
-                    }
-                    else
-                    {
-                        break;
-                    }
-                }
-                if (maxDistance > 0)
-                {
-                    ivec2 neighbor = position + neighborDirections[i] * maxDistance;
-                    imageStore(writeImage, neighbor, uvec4(WATER));
-                    return;
-                }
-            }
-            imageStore(writeImage, position, uvec4(WATER));
-            return;
-        }
+    case EMPTY:
+        /* noop */
+        return;
     }
 }

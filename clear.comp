@@ -8,9 +8,8 @@ layout(set = 1, binding = 0, r32ui) uniform writeonly uimage2D writeImage;
 void main()
 {
     ivec2 position = ivec2(gl_GlobalInvocationID).xy;
-    if (position.x >= WIDTH || position.y >= HEIGHT)
+    if (position.x < WIDTH && position.y < HEIGHT)
     {
-        return;
+        imageStore(writeImage, position, uvec4(EMPTY));
     }
-    imageStore(writeImage, position, uvec4(0));
 }

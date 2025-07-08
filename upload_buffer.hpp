@@ -54,7 +54,7 @@ public:
         if (!data && transferBuffer)
         {
             bufferSize = 0;
-            transferBufferSize = 0;
+            assert(!transferBufferSize);
             data = static_cast<T*>(SDL_MapGPUTransferBuffer(device, transferBuffer, true));
             if (!data)
             {
@@ -104,8 +104,11 @@ public:
             SDL_UnmapGPUTransferBuffer(device, transferBuffer);
             data = nullptr;
         }
-        if (!transferBufferSize)
+        uint32_t size = transferBufferSize;
+        transferBufferSize = 0;
+        if (!size)
         {
+            bufferSize = 0;
             return;
         }
         if (transferBufferCapacity > bufferCapacity)
@@ -128,9 +131,33 @@ public:
         SDL_GPUBufferRegion region{};
         location.transfer_buffer = transferBuffer;
         region.buffer = buffer;
-        region.size = transferBufferSize * sizeof(T);
+        region.size = size * sizeof(T);
         SDL_UploadToGPUBuffer(copyPass, &location, &region, true);
-        bufferSize = transferBufferSize;
+        bufferSize = size;
+    }
+
+    void Upload(SDL_GPUDevice* device, SDL_GPUCommandBuffer* commandBuffer)
+    {
+        SDL_GPUCopyPass* copyPass = SDL_BeginGPUCopyPass(commandBuffer);
+        if (!copyPass)
+        {
+            SDL_Log("Failed to begin copy pass: %s", SDL_GetError());
+            return;
+        }
+        Upload(device, copyPass);
+        SDL_EndGPUCopyPass(copyPass);
+    }
+
+    void Upload(SDL_GPUDevice* device)
+    {
+        SDL_GPUCommandBuffer* commandBuffer = SDL_AcquireGPUCommandBuffer(device);
+        if (!commandBuffer)
+        {
+            SDL_Log("Failed to acquire command buffer: %s", SDL_GetError());
+            return;
+        }
+        Upload(device, commandBuffer);
+        SDL_SubmitGPUCommandBuffer(commandBuffer);
     }
 
     SDL_GPUBuffer* GetBuffer() const

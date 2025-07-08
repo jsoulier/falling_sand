@@ -10,7 +10,6 @@
 #include <mutex>
 #include <string>
 #include <thread>
-#include <unordered_map>
 
 #include "config.hpp"
 #include "shader.hpp"
@@ -35,12 +34,15 @@ static uint32_t height;
 static volatile int speed = 16;
 static volatile int readFrame = 0;
 static volatile int writeFrame = 1;
-static uint32_t particle = SAND;
+static int red = 230;
+static int green = 0;
+static int blue = 230;
+static int type = SAND;
 static float letterboxX;
 static float letterboxY;
 static float letterboxW = 0.0f;
 static float letterboxH = 0.0f;
-static int radius = 3;
+static int radius = 10;
 static bool imguiFocused;
 
 static bool Init()
@@ -52,7 +54,7 @@ static bool Init()
         SDL_Log("Failed to initialize SDL: %s", SDL_GetError());
         return false;
     }
-    window = SDL_CreateWindow("Falling Sand", WIDTH, HEIGHT, SDL_WINDOW_RESIZABLE);
+    window = SDL_CreateWindow("Falling Sand", WIDTH * 2, HEIGHT * 2, SDL_WINDOW_RESIZABLE);
     if (!window)
     {
         SDL_Log("Failed to create window: %s", SDL_GetError());
@@ -161,7 +163,7 @@ static bool CreateTextures()
     info.num_levels = 1;
     for (int i = 0; i < FRAMES; i++)
     {
-        info.format = SDL_GPU_TEXTUREFORMAT_R8_UINT;
+        info.format = SDL_GPU_TEXTUREFORMAT_R32_UINT;
         info.usage = SDL_GPU_TEXTUREUSAGE_COMPUTE_STORAGE_READ |
             SDL_GPU_TEXTUREUSAGE_COMPUTE_STORAGE_WRITE |
             SDL_GPU_TEXTUREUSAGE_GRAPHICS_STORAGE_READ;
@@ -181,7 +183,7 @@ static bool CreateTextures()
         SDL_Log("Failed to create texture: %s", SDL_GetError());
         return false;
     }
-    info.format = SDL_GPU_TEXTUREFORMAT_R8_UINT;
+    info.format = SDL_GPU_TEXTUREFORMAT_R32_UINT;
     info.usage = SDL_GPU_TEXTUREUSAGE_COMPUTE_STORAGE_WRITE | SDL_GPU_TEXTUREUSAGE_GRAPHICS_STORAGE_READ;
     blurTexture = SDL_CreateGPUTexture(device, &info);
     if (!blurTexture)
@@ -194,13 +196,6 @@ static bool CreateTextures()
 
 static void RenderImGui(SDL_GPUCommandBuffer* commandBuffer)
 {
-    static const std::unordered_map<std::string, int> Particles =
-    {
-        {"Empty", EMPTY},
-        {"Stone", STONE},
-        {"Sand", SAND},
-        {"Water", WATER},
-    };
     ImGuiIO& io = ImGui::GetIO();
     io.DisplaySize.x = width;
     io.DisplaySize.y = height;
@@ -208,17 +203,24 @@ static void RenderImGui(SDL_GPUCommandBuffer* commandBuffer)
     ImGui::NewFrame();
     ImGui::Begin("Settings");
     imguiFocused = ImGui::IsWindowFocused();
-    int speedInt = speed;
-    ImGui::SliderInt("Simulation Delay", &speedInt, 16, 1000);
-    speed = speedInt;
-    ImGui::SliderInt("Brush Radius", &radius, 1, 30);
-    for (const auto& [string, id] : Particles)
+    int delay = speed;
+    ImGui::SliderInt("Delay", &delay, 16, 1000);
+    speed = delay;
+    ImGui::SliderInt("Radius", &radius, 1, 100);
+    ImGui::SliderInt("Red", &red, 0, 255);
+    ImGui::SliderInt("Green", &green, 0, 255);
+    ImGui::SliderInt("Blue", &blue, 0, 255);
+    if (ImGui::Button("Empty"))
     {
-        if (ImGui::Button(string.data()))
-        {
-            particle = id;
-            break;
-        }
+        type = EMPTY;
+    }
+    if (ImGui::Button("Sand"))
+    {
+        type = SAND;
+    }
+    if (ImGui::Button("Stone"))
+    {
+        type = STONE;
     }
     ImGui::End();
     ImGui::Render();
@@ -245,7 +247,9 @@ static void LetterboxBlit(SDL_GPUCommandBuffer* commandBuffer, SDL_GPUTexture* s
         letterboxW = WIDTH * scale;
         letterboxX = (width - letterboxW) / 2.0f;
     }
+    SDL_FColor clearColor = {0.02f, 0.02f, 0.02f, 1.0f};
     info.load_op = SDL_GPU_LOADOP_CLEAR;
+    info.clear_color = clearColor;
     info.source.texture = renderTexture;
     info.source.w = WIDTH;
     info.source.h = HEIGHT;
@@ -256,6 +260,40 @@ static void LetterboxBlit(SDL_GPUCommandBuffer* commandBuffer, SDL_GPUTexture* s
     info.destination.h = letterboxH;
     info.filter = SDL_GPU_FILTER_NEAREST;
     SDL_BlitGPUTexture(commandBuffer, &info);
+}
+
+static void Upload(SDL_GPUCommandBuffer* commandBuffer)
+{
+    uploadBuffer.Upload(device, commandBuffer);
+    if (!uploadBuffer.GetBufferSize() || imguiFocused)
+    {
+        return;
+    }
+    SDL_GPUStorageTextureReadWriteBinding binding{};
+    binding.texture = updateTextures[readFrame];
+    SDL_GPUComputePass* computePass = SDL_BeginGPUComputePass(commandBuffer, &binding, 1, nullptr, 0);
+    if (!computePass)
+    {
+        SDL_Log("Failed to begin compute pass: %s", SDL_GetError());
+        return;
+    }
+    int groupsX = (uploadBuffer.GetBufferSize() + UPLOAD_THREADS - 1) / UPLOAD_THREADS;
+    SDL_GPUBuffer* buffer = uploadBuffer.GetBuffer();
+    uint32_t bufferSize = uploadBuffer.GetBufferSize();
+    uint32_t particle = 0;
+    particle |= red << 0;
+    particle |= green << 8;
+    particle |= blue << 16;
+    particle |= type << 24;
+    int32_t time = SDL_GetTicks();
+    SDL_BindGPUComputePipeline(computePass, uploadPipeline);
+    SDL_BindGPUComputeStorageBuffers(computePass, 0, &buffer, 1);
+    SDL_PushGPUComputeUniformData(commandBuffer, 0, &bufferSize, sizeof(bufferSize));
+    SDL_PushGPUComputeUniformData(commandBuffer, 1, &particle, sizeof(particle));
+    SDL_PushGPUComputeUniformData(commandBuffer, 2, &radius, sizeof(radius));
+    SDL_PushGPUComputeUniformData(commandBuffer, 3, &time, sizeof(time));
+    SDL_DispatchGPUCompute(computePass, groupsX, 1, 1);
+    SDL_EndGPUComputePass(computePass);
 }
 
 static void Render()
@@ -281,6 +319,7 @@ static void Render()
         return;
     }
     RenderImGui(commandBuffer);
+    Upload(commandBuffer);
     {
         SDL_GPUStorageTextureReadWriteBinding binding{};
         binding.texture = blurTexture;
@@ -337,6 +376,7 @@ static void Render()
 
 static void Upload(float x1, float y1, float x2, float y2)
 {
+    static constexpr float Step = 1.0f;
     float dx = x2 - x1;
     float dy = y2 - y1;
     float distance = std::sqrtf(dx * dx + dy * dy);
@@ -345,7 +385,6 @@ static void Upload(float x1, float y1, float x2, float y2)
         distance = 1.0f;
     }
     float scale = static_cast<float>(letterboxW) / WIDTH;
-    static constexpr float Step = 1.0f;
     for (float i = 0.0f; i < distance; i += Step)
     {
         float t = i / distance;
@@ -358,46 +397,6 @@ static void Upload(float x1, float y1, float x2, float y2)
         position |= static_cast<uint32_t>(y) << 16;
         uploadBuffer.Emplace(device, position);
     }
-    if (!uploadBuffer.GetTransferBufferSize())
-    {
-        return;
-    }
-    SDL_GPUCommandBuffer* commandBuffer = SDL_AcquireGPUCommandBuffer(device);
-    if (!commandBuffer)
-    {
-        SDL_Log("Failed to acquire command buffer: %s", SDL_GetError());
-        return;
-    }
-    SDL_GPUCopyPass* copyPass = SDL_BeginGPUCopyPass(commandBuffer);
-    if (!copyPass)
-    {
-        SDL_Log("Failed to begin copy pass: %s", SDL_GetError());
-        SDL_CancelGPUCommandBuffer(commandBuffer);
-        return;
-    }
-    uploadBuffer.Upload(device, copyPass);
-    SDL_EndGPUCopyPass(copyPass);
-    SDL_GPUStorageTextureReadWriteBinding binding{};
-    binding.texture = updateTextures[readFrame];
-    SDL_GPUComputePass* computePass = SDL_BeginGPUComputePass(commandBuffer, &binding, 1, nullptr, 0);
-    if (!computePass)
-    {
-        SDL_Log("Failed to begin compute pass: %s", SDL_GetError());
-        SDL_CancelGPUCommandBuffer(commandBuffer);
-        return;
-    }
-    int groupsX = (uploadBuffer.GetBufferSize() + UPLOAD_THREADS - 1) / UPLOAD_THREADS;
-    SDL_GPUBuffer* buffer = uploadBuffer.GetBuffer();
-    uint32_t bufferSize = uploadBuffer.GetBufferSize();
-    int32_t radius32 = radius;
-    SDL_BindGPUComputePipeline(computePass, uploadPipeline);
-    SDL_BindGPUComputeStorageBuffers(computePass, 0, &buffer, 1);
-    SDL_PushGPUComputeUniformData(commandBuffer, 0, &bufferSize, sizeof(bufferSize));
-    SDL_PushGPUComputeUniformData(commandBuffer, 1, &particle, sizeof(particle));
-    SDL_PushGPUComputeUniformData(commandBuffer, 2, &radius, sizeof(radius));
-    SDL_DispatchGPUCompute(computePass, groupsX, 1, 1);
-    SDL_EndGPUComputePass(computePass);
-    SDL_SubmitGPUCommandBuffer(commandBuffer);
 }
 
 static void Update()
@@ -483,13 +482,12 @@ int main(int argc, char** argv)
                 running = false;
                 break;
             case SDL_EVENT_MOUSE_MOTION:
-                if (!imguiFocused && event.motion.state & SDL_BUTTON_LMASK)
+                if (event.motion.state & SDL_BUTTON_LMASK)
                 {
                     float x1 = event.motion.x - event.motion.xrel;
                     float y1 = event.motion.y - event.motion.yrel;
                     float x2 = event.motion.x;
                     float y2 = event.motion.y;
-                    std::lock_guard lock{mutex};
                     Upload(x1, y1, x2, y2);
                 }
                 break;
@@ -499,13 +497,13 @@ int main(int argc, char** argv)
         {
             break;
         }
-        std::lock_guard lock{mutex};
         float x;
         float y;
-        if (!imguiFocused && SDL_GetMouseState(&x, &y) & SDL_BUTTON_LMASK)
+        if (SDL_GetMouseState(&x, &y) & SDL_BUTTON_LMASK)
         {
             Upload(x, y, x, y);
         }
+        std::lock_guard lock{mutex};
         Render();
     }
     SDL_HideWindow(window);
