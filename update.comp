@@ -15,7 +15,8 @@ layout(set = 2, binding = 1) uniform uniformTime
     int time;
 };
 
-const ivec2 Offsets[9] = ivec2[](
+const ivec2 Offsets[9] = ivec2[]
+(
     ivec2(0, 0),
     ivec2(0, 1),
     ivec2(0, 2),

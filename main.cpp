@@ -238,6 +238,7 @@ static void LetterboxBlit(SDL_GPUCommandBuffer* commandBuffer, SDL_GPUTexture* s
         scale = static_cast<float>(width) / WIDTH;
         letterboxW = width;
         letterboxH = HEIGHT * scale;
+        letterboxX = 0.0f;
         letterboxY = (height - letterboxH) / 2.0f;
     }
     else
@@ -246,6 +247,7 @@ static void LetterboxBlit(SDL_GPUCommandBuffer* commandBuffer, SDL_GPUTexture* s
         letterboxH = height;
         letterboxW = WIDTH * scale;
         letterboxX = (width - letterboxW) / 2.0f;
+        letterboxY = 0.0f;
     }
     SDL_FColor clearColor = {0.02f, 0.02f, 0.02f, 1.0f};
     info.load_op = SDL_GPU_LOADOP_CLEAR;
